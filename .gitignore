@@ -1,4 +1,4 @@
-﻿# SECURITY CRITICAL - Never commit secrets
+# SECURITY CRITICAL - Never commit secrets
 .env
 .env.*
 !.env.example
@@ -13,18 +13,18 @@
 # SSH & JWT key directories
 keys/
 
-# Go compiled binaries (root-level)
-gateway
-gateway.exe
-gateway.exe~
-worker
-worker.exe
-scan_worker
-scan_worker.exe
-scan_worker.exe~
-scanner
-scanner.exe
-scanner.exe~
+# Go compiled binaries (root-level only — /prefix anchors to repo root)
+/gateway
+/gateway.exe
+/gateway.exe~
+/worker
+/worker.exe
+/scan_worker
+/scan_worker.exe
+/scan_worker.exe~
+/scanner
+/scanner.exe
+/scanner.exe~
 
 # Build output directories
 /bin/
