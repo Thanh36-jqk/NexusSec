@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+/* ─── NexusSec Dark Cybersecurity Theme ────────────────────────
+ * Palette: Slate/Zinc backgrounds, semantic severity colors
+ * Inspired by Cloudflare, Datadog, and CrowdStrike dashboards
+ * ──────────────────────────────────────────────────────────── */
+
+:root {
+  /* Core surface colors */
+  --background: #09090b;        /* zinc-950 — deepest black */
+  --foreground: #fafafa;        /* zinc-50 */
+  --card: #18181b;              /* zinc-900 */
+  --card-foreground: #fafafa;
+  --popover: #18181b;
+  --popover-foreground: #fafafa;
+
+  /* Muted / secondary */
+  --muted: #27272a;             /* zinc-800 */
+  --muted-foreground: #a1a1aa;  /* zinc-400 */
+
+  /* Borders & inputs */
+  --border: #27272a;            /* zinc-800 */
+  --input: #27272a;
+  --ring: #3b82f6;              /* blue-500 accent ring */
+
+  /* Primary (brand accent) */
+  --primary: #3b82f6;           /* blue-500 */
+  --primary-foreground: #fafafa;
+
+  /* Secondary */
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+
+  /* Accent */
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+
+  /* Semantic: Severity Colors */
+  --severity-critical: #ef4444;  /* red-500 */
+  --severity-high: #f97316;      /* orange-500 */
+  --severity-medium: #f59e0b;    /* amber-500 */
+  --severity-low: #3b82f6;       /* blue-500 */
+  --severity-info: #6b7280;      /* gray-500 */
+
+  /* Semantic: Status Colors */
+  --status-success: #10b981;     /* emerald-500 */
+  --status-warning: #f59e0b;     /* amber-500 */
+  --status-error: #ef4444;       /* red-500 */
+  --status-running: #3b82f6;     /* blue-500 */
+  --status-pending: #6b7280;     /* gray-500 */
+
+  /* Sidebar */
+  --sidebar: #0f0f12;
+  --sidebar-foreground: #a1a1aa;
+  --sidebar-accent: #18181b;
+
+  /* Radius */
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-severity-critical: var(--severity-critical);
+  --color-severity-high: var(--severity-high);
+  --color-severity-medium: var(--severity-medium);
+  --color-severity-low: var(--severity-low);
+  --color-severity-info: var(--severity-info);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-error: var(--status-error);
+  --color-status-running: var(--status-running);
+  --color-status-pending: var(--status-pending);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbar Styling ──────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* ─── Skeleton Animation ─────────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--muted) 25%, #303035 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius);
+}
+
+/* ─── Progress Bar Glow ──────────────────────────────────── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px var(--primary); }
+  50% { box-shadow: 0 0 20px var(--primary), 0 0 40px rgba(59, 130, 246, 0.3); }
+}
+.progress-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}

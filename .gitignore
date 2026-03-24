@@ -1,0 +1,77 @@
+﻿# SECURITY CRITICAL - Never commit secrets
+.env
+.env.*
+!.env.example
+
+# PEM / SSL / private keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# SSH & JWT key directories
+keys/
+
+# Go compiled binaries (root-level)
+gateway
+gateway.exe
+gateway.exe~
+worker
+worker.exe
+scan_worker
+scan_worker.exe
+scan_worker.exe~
+scanner
+scanner.exe
+scanner.exe~
+
+# Build output directories
+/bin/
+/dist/
+/tmp/
+
+# Go toolchain artifacts
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Docker local data
+.docker-data/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Local scan reports
+reports/*.json
+reports/*.xml
+reports/*.html

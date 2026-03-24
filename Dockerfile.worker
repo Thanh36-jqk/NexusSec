@@ -1,0 +1,27 @@
+﻿# Stage 1: Builder
+FROM golang:1.22-alpine AS builder
+
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/worker ./cmd/scanner/main.go
+
+# Stage 2: Runtime
+FROM alpine:latest
+
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+
+COPY --from=builder /app/worker .
+
+RUN addgroup -S nexussec && adduser -S nexussec -G nexussec
+USER nexussec
+
+ENTRYPOINT ["./worker"]
