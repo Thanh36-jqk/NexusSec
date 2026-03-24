@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 #  NexusSec — Docker Compose
 #  Usage:
 #    cp .env.example .env        # populate credentials
@@ -110,7 +110,7 @@ services:
   gateway:
     build:
       context: .
-      dockerfile: ./deployments/docker/gateway/Dockerfile
+      dockerfile: ./Dockerfile.gateway
     image: nexussec/gateway:latest
     container_name: nexussec-gateway
     restart: unless-stopped
@@ -154,7 +154,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: ./deployments/docker/worker/Dockerfile
+      dockerfile: ./Dockerfile.worker
     image: nexussec/worker:latest
     container_name: nexussec-worker
     restart: unless-stopped
