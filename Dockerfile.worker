@@ -26,7 +26,5 @@ WORKDIR /app
 
 COPY --from=builder /app/worker .
 
-RUN addgroup -S nexussec && adduser -S nexussec -G nexussec
-USER nexussec
 
 ENTRYPOINT ["./worker"]

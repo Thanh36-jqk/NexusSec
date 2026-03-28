@@ -125,14 +125,14 @@ func (dm *DockerManager) RunScan(
 
 	containerConfig := &container.Config{
 		Image: imageName,
-		User:  "root",
+		User:  "root", // BẮT BUỘC: Để ZAP có quyền ghi file
 		Env: []string{
 			fmt.Sprintf("TARGET_URL=%s", targetURL),
 			fmt.Sprintf("SCAN_JOB_ID=%s", jobID),
 		},
 		Cmd: cmdArgs,
 		Volumes: map[string]struct{}{
-			"/zap/wrk": {},
+			"/zap/wrk": {}, // BẮT BUỘC: Để vượt qua hàm check mount của ZAP
 		},
 	}
 
