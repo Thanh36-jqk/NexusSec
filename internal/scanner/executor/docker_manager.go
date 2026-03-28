@@ -129,6 +129,7 @@ func (dm *DockerManager) RunScan(
 		Env: []string{
 			fmt.Sprintf("TARGET_URL=%s", targetURL),
 			fmt.Sprintf("SCAN_JOB_ID=%s", jobID),
+			"ZAP_JAVA_OPTS=-Xmx512m", // CẮP QUYỀN: Ép Java chỉ dùng tối đa 512MB RAM
 		},
 		Cmd: cmdArgs,
 		Volumes: map[string]struct{}{
@@ -143,7 +144,7 @@ func (dm *DockerManager) RunScan(
 		SecurityOpt: []string{"no-new-privileges"},
 		// Resource limits to prevent a single scan from exhausting the host
 		Resources: container.Resources{
-			Memory:   512 * 1024 * 1024, // 512 MB
+			Memory:   1024 * 1024 * 1024, // 1 GB Docker container limit
 			NanoCPUs: 1_000_000_000,     // 1 CPU core
 		},
 		// Auto-remove is NOT used — we need to capture logs before removal
