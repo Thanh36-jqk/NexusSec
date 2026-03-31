@@ -8,13 +8,18 @@ import (
 	"github.com/nexussec/nexussec/internal/domain/model"
 )
 
+type zapInstance struct {
+	URI string `json:"uri"`
+}
+
 type zapAlert struct {
-	Name      string `json:"name"`
-	RiskDesc  string `json:"riskdesc"`
-	Desc      string `json:"desc"`
-	Solution  string `json:"solution"`
-	Reference string `json:"reference"`
-	CWEID     string `json:"cweid"`
+	Name      string        `json:"name"`
+	RiskDesc  string        `json:"riskdesc"`
+	Desc      string        `json:"desc"`
+	Solution  string        `json:"solution"`
+	Reference string        `json:"reference"`
+	CWEID     string        `json:"cweid"`
+	Instances []zapInstance `json:"instances"`
 }
 
 type zapSite struct {
@@ -49,6 +54,11 @@ func ParseZAPReport(reader io.Reader) ([]model.Vulnerability, error) {
 				severity = severity[:idx]
 			}
 
+			var uri string
+			if len(alert.Instances) > 0 {
+				uri = alert.Instances[0].URI
+			}
+
 			vulns = append(vulns, model.Vulnerability{
 				Title:       alert.Name,
 				Severity:    severity,
@@ -56,6 +66,7 @@ func ParseZAPReport(reader io.Reader) ([]model.Vulnerability, error) {
 				Remediation: cleanHTML(alert.Solution),
 				CWE:         alert.CWEID,
 				Reference:   cleanHTML(alert.Reference),
+				URL:         uri,
 			})
 		}
 	}

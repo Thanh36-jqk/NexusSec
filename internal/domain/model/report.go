@@ -34,6 +34,7 @@ type Vulnerability struct {
 	Remediation string `json:"remediation,omitempty" bson:"remediation,omitempty"`
 	CWE         string `json:"cwe,omitempty" bson:"cwe,omitempty"`
 	Reference   string `json:"reference,omitempty" bson:"reference,omitempty"`
+	URL         string `json:"url,omitempty" bson:"url"`
 }
 
 // ReportRepository defines the contract for report persistence (MongoDB).

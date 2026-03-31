@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -13,23 +14,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// 1. Struct dùng để hứng dữ liệu thô (Raw) cất trong MongoDB do ZAP nhả ra
-type ZAPRawReport struct {
-	ID   primitive.ObjectID `bson:"_id"`
-	Site []struct {
-		Host   string `bson:"@host"`
-		Alerts []struct {
-			Name      string `bson:"name"`
-			RiskDesc  string `bson:"riskdesc"`
-			Solution  string `bson:"solution"`
-			Instances []struct {
-				URI string `bson:"uri"`
-			} `bson:"instances"`
-		} `bson:"alerts"`
-	} `bson:"site"`
-}
-
-// 2. Struct dùng để biểu diễn một lỗ hổng đã được "làm sạch"
+// CleanVulnerability là struct đã được làm sạch để trả về cho Frontend
 type CleanVulnerability struct {
 	Name     string `json:"name"`
 	Severity string `json:"severity"`
@@ -37,12 +22,28 @@ type CleanVulnerability struct {
 	Solution string `json:"solution"`
 }
 
-// 3. Struct dùng để trả về toàn bộ báo cáo cuối cùng cho Frontend
+type MongoReport struct {
+	ID              primitive.ObjectID `bson:"_id"`
+	Vulnerabilities []MongoVuln        `bson:"vulnerabilities"`
+}
+
+type MongoVuln struct {
+	Title       string `bson:"title"`
+	Severity    string `bson:"severity"`
+	Description string `bson:"description"`
+	Remediation string `bson:"remediation"`
+	CWE         string `bson:"cwe"`
+	Reference   string `bson:"reference"`
+	URL         string `bson:"url"` // <-- ADD THIS LINE
+}
+
+// ReportResponse là response cuối cùng trả về cho Frontend
 type ReportResponse struct {
 	ScanID          string               `json:"scan_id"`
 	TotalVulns      int                  `json:"total_vulnerabilities"`
 	Vulnerabilities []CleanVulnerability `json:"vulnerabilities"`
 }
+
 type ReportHandler struct {
 	pgDB    *sqlx.DB
 	mongoDB *mongo.Database
@@ -75,15 +76,13 @@ func (h *ReportHandler) GetReport(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "scan job not found or unauthorized"})
 		return
 	} else if err != nil {
-		fmt.Printf("Database Error: %v\n", err)
+		log.Printf("[GetReport] Postgres Error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
 
-	// Chuyển status sang chữ hoa để so sánh, tránh lỗi "completed" vs "COMPLETED"
 	statusUpper := strings.ToUpper(status)
 
-	// --- ĐÂY LÀ PHẦN QUAN TRỌNG NHẤT VỪA THÊM VÀO ---
 	if statusUpper == "FAILED" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":          "scan job failed during execution. Please check target URL or scanner engine.",
@@ -92,7 +91,6 @@ func (h *ReportHandler) GetReport(c *gin.Context) {
 		return
 	}
 
-	// Nếu không phải FAILED, check tiếp xem đã COMPLETED chưa
 	if statusUpper != "COMPLETED" || !reportIDNull.Valid || reportIDNull.String == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":          "report is not ready yet",
@@ -100,41 +98,42 @@ func (h *ReportHandler) GetReport(c *gin.Context) {
 		})
 		return
 	}
-	// ------------------------------------------------
 
 	objID, err := primitive.ObjectIDFromHex(reportIDNull.String)
 	if err != nil {
+		log.Printf("[GetReport] Invalid ObjectID hex: %q, err: %v", reportIDNull.String, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid report ID format in database"})
 		return
 	}
 
-	// 2. Truy vấn MongoDB để lấy dữ liệu báo cáo chi tiết
-	var rawReport ZAPRawReport
-	err = h.mongoDB.Collection("reports").FindOne(c.Request.Context(), bson.M{"_id": objID}).Decode(&rawReport)
+	// 2. Truy vấn MongoDB với Explicit Struct
+	var report MongoReport
+
+	err = h.mongoDB.Collection("reports").FindOne(c.Request.Context(), bson.M{"_id": objID}).Decode(&report)
 
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("[GetReport] MongoDB Error: Document not found for ID %s", objID.Hex())
+			c.JSON(http.StatusNotFound, gin.H{"error": "report document not found in storage"})
+			return
+		}
+		log.Printf("[GetReport] MongoDB Error: Failed to decode document ID %s: %v", objID.Hex(), err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch report from storage"})
 		return
 	}
 
-	// 3. Lọc dữ liệu (Mapping sang DTO sạch sẽ cho Frontend)
-	var cleanVulns []CleanVulnerability
-	if len(rawReport.Site) > 0 {
-		for _, alert := range rawReport.Site[0].Alerts {
-			vuln := CleanVulnerability{
-				Name:     alert.Name,
-				Severity: alert.RiskDesc,
-				Solution: alert.Solution,
-			}
-			if len(alert.Instances) > 0 {
-				vuln.URL = alert.Instances[0].URI
-			}
-			cleanVulns = append(cleanVulns, vuln)
-		}
-	}
+	// 3. LOG ĐIỀU TRA (CRITICAL)
+	log.Printf("[GetReport] Decode OK | vulnerabilities_count=%d | report_id=%s", len(report.Vulnerabilities), objID.Hex())
 
-	if cleanVulns == nil {
-		cleanVulns = []CleanVulnerability{}
+	// 4. Mapping dữ liệu chuẩn hóa
+	cleanVulns := make([]CleanVulnerability, 0, len(report.Vulnerabilities))
+	for _, v := range report.Vulnerabilities {
+		cleanVulns = append(cleanVulns, CleanVulnerability{
+			Name:     v.Title,
+			Severity: v.Severity,
+			Solution: v.Remediation,
+			URL:      v.URL,
+		})
 	}
 
 	c.JSON(http.StatusOK, ReportResponse{
