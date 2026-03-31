@@ -1,0 +1,25 @@
+name: Deploy NexusSec to Azure
+
+on:
+  push:
+    branches: [ main ] # Tự động chạy mỗi khi cậu push code lên nhánh main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to Azure via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ~/app_source
+            git pull origin main
+            docker compose build --no-cache gateway
+            docker compose up -d gateway
+            docker image prune -f # Xóa các image cũ để tránh đầy ổ cứng
