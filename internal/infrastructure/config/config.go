@@ -1,7 +1,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/spf13/viper"
@@ -126,7 +129,11 @@ func Load() (*Config, error) {
 
 	// Attempt to read .env file; ignore if not found (env vars are sufficient)
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			log.Println("[config] .env file not found, using environment variables only")
+		} else if errors.Is(err, os.ErrNotExist) {
+			log.Println("[config] .env file not found, using environment variables only")
+		} else {
 			return nil, fmt.Errorf("config: failed to read config file: %w", err)
 		}
 	}

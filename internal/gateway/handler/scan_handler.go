@@ -10,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/nexussec/nexussec/internal/gateway/middleware"
 	"github.com/nexussec/nexussec/internal/infrastructure/broker"
+	"github.com/nexussec/nexussec/internal/validator"
 	"github.com/nexussec/nexussec/pkg/response"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog"
@@ -114,6 +115,17 @@ func (h *ScanHandler) CreateScan(c *gin.Context) {
 		}
 		h.logger.Error().Err(err).Msg("failed to query target")
 		response.InternalError(c, "failed to look up target")
+		return
+	}
+
+	// ── SSRF Protection: chặn target trỏ về IP nội bộ ───────
+	if err := validator.ValidateTarget(targetURL); err != nil {
+		h.logger.Warn().
+			Str("target_url", targetURL).
+			Str("user_id", userID.(string)).
+			Err(err).
+			Msg("SSRF blocked")
+		response.BadRequest(c, "Lỗi bảo mật: "+err.Error())
 		return
 	}
 
