@@ -89,6 +89,17 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to declare scan_jobs_queue")
 	}
 
+	// ── 6b. Connect to MongoDB (for Reports) ────────────────
+	mongoClient, mongoDB, err := database.NewMongoDB(&cfg.Mongo, log)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to connect to MongoDB")
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		mongoClient.Disconnect(ctx)
+	}()
+
 	// ── 7. Initialize Handlers ──────────────────────────────
 	authHandler := handler.NewAuthHandler(
 		pgDB,
@@ -102,6 +113,10 @@ func main() {
 
 	targetHandler := handler.NewTargetHandler(pgDB, log)
 
+	reportHandler := handler.NewReportHandler(pgDB, mongoDB, log)
+
+	triageHandler := handler.NewTriageHandler(pgDB, log)
+
 	// ── 8. Wire Dependencies & Setup Router ─────────────────
 	deps := &router.Dependencies{
 		Logger:         log,
@@ -112,6 +127,8 @@ func main() {
 		AuthHandler:    authHandler,
 		ScanHandler:    scanHandler,
 		TargetHandler:  targetHandler,
+		ReportHandler:  reportHandler,
+		TriageHandler:  triageHandler,
 	}
 
 	engine := router.Setup(deps)

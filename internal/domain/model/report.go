@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// Report represents a vulnerability report.
+// Report represents a vulnerability report stored in MongoDB.
+// This is the unified output regardless of which scan tool produced it.
 type Report struct {
 	ID              string          `json:"id" bson:"_id,omitempty"`
 	ScanJobID       string          `json:"scan_job_id" bson:"scan_job_id"`
@@ -26,15 +27,40 @@ type ReportSummary struct {
 	Info     int `json:"info" bson:"info"`
 }
 
-// Vulnerability represents a single finding from a scan tool.
+// Vulnerability is the UNIFIED data model for all scan tools.
+//
+// Bất kể tool nào (ZAP, Nmap, Nikto, Nuclei...) quét ra kết quả,
+// parser tương ứng PHẢI ép dữ liệu vào struct này trước khi lưu MongoDB.
+// Frontend chỉ cần biết 1 format duy nhất.
+//
+// Fields:
+//   - VulnID:      Mã định danh duy nhất (CVE-xxxx, CWE-xxxx, hoặc tool-generated ID)
+//   - Title:       Tên ngắn gọn của lỗ hổng
+//   - Severity:    Mức độ nghiêm trọng (critical/high/medium/low/info)
+//   - CVSSScore:   Điểm CVSS 0.0–10.0 (0 nếu tool không cung cấp)
+//   - Description: Mô tả chi tiết lỗ hổng
+//   - Remediation: Giải pháp khắc phục
+//   - CWE:         CWE ID (ví dụ: "79" cho XSS)
+//   - Reference:   Liên kết tham khảo
+//   - URL:         URL cụ thể bị ảnh hưởng
+//   - Port:        Cổng mạng (chủ yếu từ Nmap)
+//   - Protocol:    Giao thức (tcp/udp)
+//   - Service:     Tên dịch vụ (http, ssh, ftp...)
+//   - SourceTool:  Tool nào phát hiện (zap/nmap/nikto/nuclei...)
 type Vulnerability struct {
-	Title       string `json:"title" bson:"title"`
-	Severity    string `json:"severity" bson:"severity"`
-	Description string `json:"description" bson:"description"`
-	Remediation string `json:"remediation,omitempty" bson:"remediation,omitempty"`
-	CWE         string `json:"cwe,omitempty" bson:"cwe,omitempty"`
-	Reference   string `json:"reference,omitempty" bson:"reference,omitempty"`
-	URL         string `json:"url,omitempty" bson:"url"`
+	VulnID      string  `json:"vuln_id" bson:"vuln_id"`
+	Title       string  `json:"title" bson:"title"`
+	Severity    string  `json:"severity" bson:"severity"`
+	CVSSScore   float64 `json:"cvss_score,omitempty" bson:"cvss_score,omitempty"`
+	Description string  `json:"description" bson:"description"`
+	Remediation string  `json:"remediation,omitempty" bson:"remediation,omitempty"`
+	CWE         string  `json:"cwe,omitempty" bson:"cwe,omitempty"`
+	Reference   string  `json:"reference,omitempty" bson:"reference,omitempty"`
+	URL         string  `json:"url,omitempty" bson:"url,omitempty"`
+	Port        int     `json:"port,omitempty" bson:"port,omitempty"`
+	Protocol    string  `json:"protocol,omitempty" bson:"protocol,omitempty"`
+	Service     string  `json:"service,omitempty" bson:"service,omitempty"`
+	SourceTool  string  `json:"source_tool" bson:"source_tool"`
 }
 
 // ReportRepository defines the contract for report persistence (MongoDB).

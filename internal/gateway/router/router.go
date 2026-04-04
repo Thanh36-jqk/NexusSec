@@ -22,6 +22,8 @@ type Dependencies struct {
 	AuthHandler    *handler.AuthHandler   // Register/Login handler
 	ScanHandler    *handler.ScanHandler   // Scan job management (PG + RabbitMQ)
 	TargetHandler  *handler.TargetHandler // Target management (PG)
+	ReportHandler  *handler.ReportHandler // Report retrieval (PG + MongoDB)
+	TriageHandler  *handler.TriageHandler // Triage persistence (PG)
 }
 
 // Setup creates the Gin engine with all routes, middleware, and handlers wired.
@@ -101,6 +103,14 @@ func Setup(deps *Dependencies) *gin.Engine {
 				scans.POST("", scanRateLimiter.Handler(), deps.ScanHandler.CreateScan)
 				scans.GET("", deps.ScanHandler.ListScans)
 				scans.GET("/:id", deps.ScanHandler.GetScan)
+
+				// Report route — sub-resource of a scan job
+				// GET /api/v1/scans/:id/report
+				scans.GET("/:id/report", deps.ReportHandler.GetReport)
+
+				// Triage routes
+				scans.GET("/:id/triage", deps.TriageHandler.GetTriageRules)
+				scans.PUT("/:id/triage/:fingerprint", deps.TriageHandler.UpsertTriageRule)
 			}
 		}
 	}

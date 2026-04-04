@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	"github.com/nexussec/nexussec/internal/gateway/middleware"
+	"github.com/nexussec/nexussec/internal/validator"
 	"github.com/nexussec/nexussec/pkg/response"
 	"github.com/rs/zerolog"
 )
@@ -70,6 +71,17 @@ func (h *TargetHandler) CreateTarget(c *gin.Context) {
 	req.BaseURL = strings.TrimSpace(req.BaseURL)
 	if _, err := url.ParseRequestURI(req.BaseURL); err != nil {
 		response.BadRequest(c, "invalid URL format")
+		return
+	}
+
+	// ── SSRF Protection: chặn target trỏ về IP nội bộ/metadata ──
+	if err := validator.ValidateTarget(req.BaseURL); err != nil {
+		h.logger.Warn().
+			Str("base_url", req.BaseURL).
+			Str("user_id", userID.(string)).
+			Err(err).
+			Msg("SSRF blocked at target creation")
+		response.BadRequest(c, "Lỗi bảo mật: "+err.Error())
 		return
 	}
 

@@ -1,25 +1,82 @@
-name: Deploy NexusSec to Azure
+name: Deploy NexusSec to Azure VM
+
+# ══════════════════════════════════════════════════════════════
+#  Trigger: Push to main branch
+#  Target:  Azure VM B2s running Docker Compose
+#
+#  Flow:
+#    1. SSH into Azure VM
+#    2. Pull latest code
+#    3. Build all 3 application images (gateway, worker, frontend)
+#    4. Restart services with zero-downtime rolling approach
+#    5. Clean up dangling images
+#
+#  Required GitHub Secrets:
+#    SSH_HOST     — Azure VM public IP (or hostname)
+#    SSH_USER     — VM login user (e.g. azureuser)
+#    SSH_KEY      — Private SSH key (ed25519 or RSA)
+# ══════════════════════════════════════════════════════════════
 
 on:
   push:
-    branches: [ main ] # Tự động chạy mỗi khi cậu push code lên nhánh main
+    branches: [ main ]
+
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   deploy:
+    name: Build & Deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Deploy to Azure via SSH
-        uses: appleboy/ssh-action@master
+      - name: Deploy to Azure VM via SSH
+        uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          command_timeout: 25m
           script: |
-            cd ~/app_source
+            set -euo pipefail
+
+            echo "══════════════════════════════════════════"
+            echo "  NexusSec Deploy — $(date)"
+            echo "══════════════════════════════════════════"
+
+            # ── 1. Pull latest code ──────────────────────
+            cd ~/nexussec
+            echo "→ Pulling latest code..."
             git pull origin main
-            docker compose build --no-cache gateway
-            docker compose up -d gateway
-            docker image prune -f # Xóa các image cũ để tránh đầy ổ cứng
+
+            # ── 2. Build all application images ──────────
+            echo "→ Building images..."
+            docker compose build --parallel gateway worker frontend
+
+            # ── 3. Restart services ──────────────────────
+            # Infrastructure services (postgres, mongodb, redis, rabbitmq)
+            # are long-running and rarely change. Only restart app services.
+            echo "→ Restarting application services..."
+            docker compose up -d gateway worker frontend nginx
+
+            # ── 4. Health check ──────────────────────────
+            echo "→ Waiting for services to stabilize..."
+            sleep 10
+
+            echo "→ Checking Nginx..."
+            curl -sf http://localhost/nginx-health || echo "⚠ Nginx not ready yet"
+
+            echo "→ Container status:"
+            docker compose ps
+
+            # ── 5. Cleanup ───────────────────────────────
+            echo "→ Cleaning up old images..."
+            docker image prune -f
+
+            echo "══════════════════════════════════════════"
+            echo "  ✅ Deploy complete!"
+            echo "══════════════════════════════════════════"

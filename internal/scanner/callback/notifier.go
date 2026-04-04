@@ -2,6 +2,7 @@ package callback
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/nexussec/nexussec/internal/domain/enum"
@@ -37,23 +38,38 @@ func (n *Notifier) MarkRunning(ctx context.Context, jobID string) error {
 }
 
 // MarkCompleted stores the report in MongoDB and transitions the job to COMPLETED.
+//
+// Before storing, it calculates the ReportSummary by counting vulnerabilities
+// by severity level (Critical, High, Medium, Low, Informational).
 func (n *Notifier) MarkCompleted(ctx context.Context, jobID string, report *model.Report) error {
 	log := n.logger.With().Str("job_id", jobID).Logger()
 
-	// 1. Store report in MongoDB
+	// 1. Calculate ReportSummary from vulnerabilities
+	report.Summary = computeSummary(report.Vulnerabilities)
 	report.CreatedAt = time.Now()
+
+	log.Info().
+		Int("total", report.Summary.Total).
+		Int("critical", report.Summary.Critical).
+		Int("high", report.Summary.High).
+		Int("medium", report.Summary.Medium).
+		Int("low", report.Summary.Low).
+		Int("info", report.Summary.Info).
+		Msg("report summary computed")
+
+	// 2. Store report in MongoDB
 	reportID, err := n.reportRepo.Create(ctx, report)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to store report in MongoDB")
 		return n.MarkFailed(ctx, jobID, "failed to store report: "+err.Error())
 	}
 
-	// 2. Link report ID to the scan job
+	// 3. Link report ID to the scan job
 	if err := n.jobRepo.SetReportID(ctx, jobID, reportID); err != nil {
 		log.Error().Err(err).Msg("failed to link report ID to job")
 	}
 
-	// 3. Transition to COMPLETED
+	// 4. Transition to COMPLETED
 	log.Info().Str("report_id", reportID).Msg("job status → COMPLETED")
 	return n.jobRepo.UpdateStatus(ctx, jobID, enum.ScanStatusCompleted)
 }
@@ -73,4 +89,30 @@ func (n *Notifier) MarkFailed(ctx context.Context, jobID string, errMsg string) 
 // UpdateProgress updates the job's progress percentage (0–100).
 func (n *Notifier) UpdateProgress(ctx context.Context, jobID string, progress int) error {
 	return n.jobRepo.UpdateProgress(ctx, jobID, progress)
+}
+
+// computeSummary counts vulnerabilities by severity level.
+// Handles case-insensitive matching for severity strings from different scan tools
+// (e.g., ZAP uses "High", nmap might use "HIGH").
+func computeSummary(vulns []model.Vulnerability) model.ReportSummary {
+	summary := model.ReportSummary{
+		Total: len(vulns),
+	}
+
+	for _, v := range vulns {
+		switch strings.ToLower(v.Severity) {
+		case "critical":
+			summary.Critical++
+		case "high":
+			summary.High++
+		case "medium":
+			summary.Medium++
+		case "low":
+			summary.Low++
+		case "informational", "info":
+			summary.Info++
+		}
+	}
+
+	return summary
 }

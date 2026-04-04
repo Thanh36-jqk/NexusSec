@@ -132,3 +132,114 @@ body {
 .progress-glow {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+/* ─── Slide-in Right (Triage Detail Panel) ───────────────── */
+@keyframes slide-in-right {
+  0% {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ─── Fade Scale In (Tab Content) ────────────────────────── */
+@keyframes fade-scale-in {
+  0% {
+    transform: scale(0.98);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.animate-fade-scale-in {
+  animation: fade-scale-in 0.2s ease-out forwards;
+}
+
+/* ─── Split-Pane ─────────────────────────────────────────── */
+.triage-split {
+  display: flex;
+  height: calc(100vh - 320px);
+  min-height: 400px;
+}
+
+.triage-list {
+  flex: 1 1 0%;
+  min-width: 320px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+}
+
+.triage-detail {
+  flex: 0 0 480px;
+  max-width: 560px;
+  overflow-y: auto;
+  background: var(--card);
+  border-left: 1px solid var(--border);
+}
+
+/* Resize handle between panels */
+.triage-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.triage-resize-handle:hover,
+.triage-resize-handle:active {
+  background: var(--primary);
+}
+
+/* ─── Triage Row States ──────────────────────────────────── */
+.triage-row {
+  cursor: pointer;
+  transition: background-color 0.1s, border-color 0.1s;
+  border-left: 3px solid transparent;
+}
+.triage-row:hover {
+  background-color: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+.triage-row--selected {
+  background-color: color-mix(in srgb, var(--primary) 8%, transparent);
+  border-left-color: var(--primary);
+}
+.triage-row--muted {
+  opacity: 0.4;
+}
+.triage-row--false-positive .triage-row__name {
+  text-decoration: line-through;
+  text-decoration-color: var(--muted-foreground);
+}
+
+/* ─── Tab Switcher ───────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+.tab-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.tab-item:hover {
+  color: var(--foreground);
+}
+.tab-item--active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}

@@ -50,13 +50,26 @@ export interface ReportSummary {
 }
 
 export interface Vulnerability {
+    vuln_id: string;
     name: string;
     severity: Severity;
+    cvss_score?: number;
     description: string;
     url?: string;
     solution?: string;
     reference?: string;
     cwe?: string;
+    port?: number;
+    protocol?: string;
+    service?: string;
+    source_tool: string;
+}
+
+// ── Triage State ─────────────────────────────────────────────
+
+export interface VulnTriageState {
+    is_false_positive: boolean;
+    is_muted: boolean;
 }
 
 // ── WebSocket Messages ────────────────────────────────────────

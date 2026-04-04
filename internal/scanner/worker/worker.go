@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nexussec/nexussec/internal/domain/model"
 	"github.com/nexussec/nexussec/internal/infrastructure/broker"
@@ -165,7 +166,10 @@ func (w *Worker) runWorker(ctx context.Context, workerID int, deliveries <-chan 
 }
 
 // processMessage handles a single scan job message:
-// parse → mark RUNNING → execute Docker scan → store report → mark COMPLETED/FAILED → ack/nack.
+// parse → mark RUNNING → execute Docker scan → parse output via Strategy Pattern → mark COMPLETED/FAILED → ack.
+//
+// The parsing step uses parser.GetParser(scanType) — NO if-else chains.
+// New scan tools only need to implement VulnerabilityParser and register in the parser registry.
 func (w *Worker) processMessage(ctx context.Context, log zerolog.Logger, delivery amqp.Delivery) {
 	// ── Parse message ───────────────────────────────────────
 	var msg ScanMessage
@@ -192,82 +196,189 @@ func (w *Worker) processMessage(ctx context.Context, log zerolog.Logger, deliver
 		return
 	}
 
-	// ── Resolve scan image and args ─────────────────────────
-	imageName, cmdArgs := w.resolveScanConfig(msg.ScanType, msg.TargetURL, msg.JobID)
-
-	// ── Execute scan via Docker ─────────────────────────────
-	result, err := w.docker.RunScan(ctx, msg.JobID, imageName, msg.TargetURL, cmdArgs)
-	if err != nil {
-		log.Error().Err(err).Msg("scan execution failed")
-		w.notifier.MarkFailed(ctx, msg.JobID, fmt.Sprintf("scan execution error: %v", err))
-		// Ack — the message was processed (just with a failure outcome)
-		delivery.Ack(false)
-		return
-	}
-
-	// ── Check exit code ─────────────────────────────────────
-	// ── Check exit code ─────────────────────────────────────
-	// LƯU Ý QUAN TRỌNG VỀ ZAP EXIT CODES:
-	// 0: Thành công, không có lỗi bảo mật nào.
-	// 1: Lỗi hệ thống (Crash, sai lệnh, không kết nối được).
-	// 2: Thành công, tìm thấy lỗ hổng mức độ Cảnh báo (Warnings).
-	// 3: Thành công, tìm thấy lỗ hổng mức độ Nghiêm trọng (Errors).
-	// Do đó, ta chỉ đánh dấu Job FAILED khi container thực sự sập (ExitCode == 1).
-
-	if result.ExitCode == 1 {
-		outStr := strings.TrimSpace(result.Stdout)
-		if len(outStr) > 1000 {
-			outStr = "..." + outStr[len(outStr)-1000:]
-		}
-		errMsg := fmt.Sprintf("scan container crashed with code %d.\nStderr: %s\nStdout (tail): %s", result.ExitCode, strings.TrimSpace(result.Stderr), outStr)
-		log.Warn().Int64("exit_code", result.ExitCode).Msg("scan container crashed")
-		w.notifier.MarkFailed(ctx, msg.JobID, errMsg)
-		delivery.Ack(false)
-		return
-	}
-	// ── Build report from stdout ────────────────────────────
+	// ── Execute Scan ─────────────────────────────────────────
 	report := &model.Report{
 		ScanJobID: msg.JobID,
 		TargetURL: msg.TargetURL,
 		ScanType:  msg.ScanType,
 	}
 
-	if msg.ScanType == "zap" || msg.ScanType == "full" {
+	if msg.ScanType == "full" {
+		w.executeFullScanConcurrent(ctx, log, delivery, msg, report)
+	} else {
+		w.executeSingleScan(ctx, log, delivery, msg, report)
+	}
+}
 
-		// 1. KIỂM TRA RÁC TRƯỚC (Bộ lọc an toàn)
+// executeSingleScan xử lý các scan đơn lẻ (zap, nmap).
+func (w *Worker) executeSingleScan(ctx context.Context, log zerolog.Logger, delivery amqp.Delivery, msg ScanMessage, report *model.Report) {
+	imageName, cmdArgs := w.resolveScanConfig(msg.ScanType, msg.TargetURL, msg.JobID)
+
+	result, err := w.docker.RunScan(ctx, msg.JobID, imageName, msg.TargetURL, cmdArgs)
+	if err != nil {
+		log.Error().Err(err).Msg("scan execution failed")
+		w.notifier.MarkFailed(ctx, msg.JobID, fmt.Sprintf("scan execution error: %v", err))
+		delivery.Ack(false)
+		return
+	}
+
+	if result.ExitCode == 1 {
 		outStr := strings.TrimSpace(result.Stdout)
-		if !strings.HasPrefix(outStr, "{") {
-			errMsg := "Scan failed: No valid JSON report found. Target might be unreachable or invalid."
-			log.Error().Str("raw_output", outStr).Msg(errMsg)
+		if len(outStr) > 1000 {
+			outStr = "..." + outStr[len(outStr)-1000:]
+		}
+		errMsg := fmt.Sprintf("scan container crashed with code %d.\nStderr: %s\nStdout (tail): %s",
+			result.ExitCode, strings.TrimSpace(result.Stderr), outStr)
+		log.Warn().Int64("exit_code", result.ExitCode).Msg("scan container crashed")
+		w.notifier.MarkFailed(ctx, msg.JobID, errMsg)
+		delivery.Ack(false)
+		return
+	}
+
+	p, err := parser.GetParser(msg.ScanType)
+	if err != nil {
+		log.Warn().Err(err).Msg("no parser available, storing empty report")
+	} else {
+		outStr := strings.TrimSpace(result.Stdout)
+		if outStr == "" {
+			errMsg := "scan produced empty output — target may be unreachable"
+			log.Error().Msg(errMsg)
 			w.notifier.MarkFailed(ctx, msg.JobID, errMsg)
 			delivery.Ack(false)
 			return
 		}
 
-		// 2. DỮ LIỆU ĐÃ SẠCH, BẮT ĐẦU PARSE JSON
-		vulns, err := parser.ParseZAPReport(strings.NewReader(result.Stdout))
+		vulns, err := p.Parse(strings.NewReader(outStr))
 		if err != nil {
-			log.Error().Err(err).Msg("failed to parse ZAP report")
+			log.Error().Err(err).Msg("failed to parse scan output")
 			w.notifier.MarkFailed(ctx, msg.JobID, fmt.Sprintf("failed to parse scanner output: %v", err))
-			delivery.Ack(false) // Loại bỏ message lỗi khỏi queue
+			delivery.Ack(false)
 			return
 		}
 
 		report.Vulnerabilities = vulns
 		log.Info().Int("vuln_count", len(vulns)).Msg("successfully parsed vulnerabilities")
-
-	} else {
-		log.Info().Str("scan_type", msg.ScanType).Msg("no specific parser implemented, skipping parsing")
 	}
 
 	if err := w.notifier.MarkCompleted(ctx, msg.JobID, report); err != nil {
 		log.Error().Err(err).Msg("failed to mark job as COMPLETED")
-		// Ack anyway — the scan itself succeeded, this is a DB issue
 		delivery.Ack(false)
 		return
 	}
 
-	log.Info().Msg("scan job completed successfully")
+	log.Info().Msg("single scan job completed successfully")
+	delivery.Ack(false)
+}
+
+// executeFullScanConcurrent điều phối chạy ZAP và Nmap song song, thu thập và gộp kết quả.
+//
+// ANTI-ZOMBIE: Toàn bộ full scan bị giới hạn trong 30 phút.
+// Nếu target dùng chiến thuật Tar Pit (giữ kết nối treo), context sẽ tự cancel,
+// docker.RunScan sẽ kill container, goroutine thoát, WaitGroup giải phóng.
+// Worker không bao giờ bị giam — RabbitMQ luôn nhận được Ack/Nack.
+func (w *Worker) executeFullScanConcurrent(ctx context.Context, log zerolog.Logger, delivery amqp.Delivery, msg ScanMessage, report *model.Report) {
+	// ── ANTI-ZOMBIE: Hard timeout cho toàn bộ full scan ──────
+	// DockerManager đã có 15 phút timeout cho MỖI container.
+	// Cái này là tầng bảo vệ cao nhất: dù Docker timeout fail, 30 phút sau
+	// context sẽ bị cancel, mọi goroutine buộc phải thoát.
+	scanCtx, scanCancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer scanCancel()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var zapVulns, nmapVulns []model.Vulnerability
+	var zapErr, nmapErr error
+
+	// 1. Luồng ZAP
+	go func() {
+		defer wg.Done()
+		zapLog := log.With().Str("sub_scan", "zap").Logger()
+		image, args := w.resolveScanConfig("zap", msg.TargetURL, msg.JobID)
+		
+		res, err := w.docker.RunScan(scanCtx, msg.JobID+"_zap", image, msg.TargetURL, args)
+		if err != nil {
+			zapErr = fmt.Errorf("execution error: %w", err)
+			return
+		}
+		if res.ExitCode == 1 {
+			zapErr = fmt.Errorf("container crashed")
+			return
+		}
+
+		p, _ := parser.GetParser("zap")
+		if out:= strings.TrimSpace(res.Stdout); out != "" {
+			vulns, err := p.Parse(strings.NewReader(out))
+			if err != nil {
+				zapErr = fmt.Errorf("parse error: %w", err)
+			} else {
+				zapVulns = vulns
+				zapLog.Info().Int("vuln_count", len(vulns)).Msg("zap sub-scan finished")
+			}
+		}
+	}()
+
+	// 2. Luồng Nmap
+	go func() {
+		defer wg.Done()
+		nmapLog := log.With().Str("sub_scan", "nmap").Logger()
+		image, args := w.resolveScanConfig("nmap", msg.TargetURL, msg.JobID)
+		
+		res, err := w.docker.RunScan(scanCtx, msg.JobID+"_nmap", image, msg.TargetURL, args)
+		if err != nil {
+			nmapErr = fmt.Errorf("execution error: %w", err)
+			return
+		}
+		if res.ExitCode == 1 {
+			nmapErr = fmt.Errorf("container crashed")
+			return
+		}
+
+		p, _ := parser.GetParser("nmap")
+		if out:= strings.TrimSpace(res.Stdout); out != "" {
+			vulns, err := p.Parse(strings.NewReader(out))
+			if err != nil {
+				nmapErr = fmt.Errorf("parse error: %w", err)
+			} else {
+				nmapVulns = vulns
+				nmapLog.Info().Int("vuln_count", len(vulns)).Msg("nmap sub-scan finished")
+			}
+		}
+	}()
+
+	// Đợi cả 2 hoàn tất
+	wg.Wait()
+
+	// Đánh giá kết quả cuối cùng
+	if zapErr != nil && nmapErr != nil {
+		errMsg := fmt.Sprintf("Full scan completely failed. ZAP: %v | Nmap: %v", zapErr, nmapErr)
+		log.Error().Msg(errMsg)
+		w.notifier.MarkFailed(ctx, msg.JobID, errMsg)
+		delivery.Ack(false)
+		return
+	}
+
+	if zapErr != nil {
+		log.Warn().Err(zapErr).Msg("ZAP scan failed, relying on Nmap results only")
+	}
+	if nmapErr != nil {
+		log.Warn().Err(nmapErr).Msg("Nmap scan failed, relying on ZAP results only")
+	}
+
+	// 3. Khử trùng lặp và Merge
+	report.Vulnerabilities = parser.MergeAndDeduplicate(zapVulns, nmapVulns)
+
+	if err := w.notifier.MarkCompleted(ctx, msg.JobID, report); err != nil {
+		log.Error().Err(err).Msg("failed to mark job as COMPLETED")
+		delivery.Ack(false)
+		return
+	}
+
+	log.Info().
+		Int("zap_vulns", len(zapVulns)).
+		Int("nmap_vulns", len(nmapVulns)).
+		Int("merged_vulns", len(report.Vulnerabilities)).
+		Msg("full scan concurrent job completed successfully")
 	delivery.Ack(false)
 }
 
@@ -280,23 +391,28 @@ func (w *Worker) resolveScanConfig(scanType string, targetURL string, jobID stri
 			"zap-baseline.py",
 			"-t", targetURL,
 			"-J", fmt.Sprintf("report_%s.json", jobID),
+			// ── RATELIMIT ZAP: Max 2 min spider, max 2 concurrent thread per host ──
+			"-z", "-config spider.maxDuration=2 -config scanner.threadPerHost=2",
 		}
 
 	case "nmap":
 		return "instrumentisto/nmap:latest", []string{
-			"-sV",           // Service version detection
-			"--script=vuln", // Run vulnerability scripts
-			"-oX", "-",      // Output XML to stdout
+			"-T3",               // ── RATELIMIT NMAP: Polite/Normal speed
+			"--max-rate", "100", // ── RATELIMIT NMAP: Max 100 packets/sec
+			"-sV",               // Service version detection
+			"--script=vuln",     // Run vulnerability scripts
+			"-oX", "-",          // Output XML to stdout
 			targetURL,
 		}
 
 	case "full":
-		// For "full" scans, we default to ZAP for now.
-		// A production implementation would run both sequentially or in parallel.
+		// 'full' execution logic is now handled uniquely inside processMessage via executeFullScanConcurrent
+		// We should normally not reach here if caller routes properly. Fallback to ZAP config just in case.
 		return "ghcr.io/zaproxy/zaproxy:stable", []string{
-			"zap-full-scan.py",
+			"zap-baseline.py",
 			"-t", targetURL,
 			"-J", fmt.Sprintf("report_%s.json", jobID),
+			"-z", "-config spider.maxDuration=2 -config scanner.threadPerHost=2",
 		}
 
 	default:

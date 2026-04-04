@@ -174,7 +174,7 @@ export function useWebSocket({
                     );
 
                     setConnectionState("reconnecting");
-                    reconnectTimerRef.current = setTimeout(connect, delay);
+                    reconnectTimerRef.current = setTimeout(() => connect(), delay);
                 } else if (retryCountRef.current >= maxRetries) {
                     toast.error("Connection failed", {
                         description: `Unable to reconnect after ${maxRetries} attempts. Refresh the page.`,

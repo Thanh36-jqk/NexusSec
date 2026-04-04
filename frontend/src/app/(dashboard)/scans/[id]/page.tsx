@@ -17,8 +17,15 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { ScanProgressBar } from "@/components/scan/ScanProgressBar";
 import { ReportSummary } from "@/components/report/ReportSummary";
 import { FindingsTable } from "@/components/report/FindingsTable";
+import { TriageView } from "@/components/triage/TriageView";
+import { AttackSurfaceGraph } from "@/components/topology/AttackSurfaceGraph";
 import { ScanDetailSkeleton } from "@/components/ui/skeleton-card";
+import { useTriageStore } from "@/stores/useTriageStore";
 import type { ScanJob, Report, WSMessage } from "@/types";
+
+// ── Tab Types ────────────────────────────────────────────────
+
+type ReportTab = "summary" | "topology" | "triage";
 
 // ── API Config ───────────────────────────────────────────────
 
@@ -98,6 +105,7 @@ export default function ScanDetailPage() {
     const [report, setReport] = useState<Report | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<ReportTab>("summary");
 
     // ── WebSocket ────────────────────────────────────────────
 
@@ -153,13 +161,30 @@ export default function ScanDetailPage() {
 
     const fetchReport = useCallback(async () => {
         try {
-            const res = await fetch(`${API_BASE}/reports?scan_job_id=${jobId}`);
-            if (!res.ok) return;
+            const [reportRes, triageRes] = await Promise.all([
+                fetch(`${API_BASE}/reports?scan_job_id=${jobId}`),
+                fetch(`${API_BASE}/scans/${jobId}/triage`)
+            ]);
 
-            const json = await res.json();
-            setReport(json.data);
+            if (reportRes.ok) {
+                const json = await reportRes.json();
+                setReport(json.data);
+            }
+
+            if (triageRes.ok) {
+                const triageJson = await triageRes.json();
+                // Map array of rules to a Record<vuln_fingerprint, VulnTriageState>
+                const stateMap: Record<string, { is_muted: boolean; is_false_positive: boolean }> = {};
+                for (const rule of triageJson.data || []) {
+                    stateMap[rule.vuln_fingerprint] = {
+                        is_muted: rule.is_muted,
+                        is_false_positive: rule.is_false_positive,
+                    };
+                }
+                useTriageStore.getState().hydrateTriageStates(stateMap);
+            }
         } catch {
-            console.warn("Failed to fetch report");
+            console.warn("Failed to fetch report or triage states");
         }
     }, [jobId]);
 
@@ -292,10 +317,54 @@ export default function ScanDetailPage() {
 
             {/* ── Report (shown when COMPLETED) ──────────────── */}
             {isComplete && report && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
                     <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-                    <ReportSummary summary={report.summary} />
-                    <FindingsTable vulnerabilities={report.vulnerabilities} />
+
+                    {/* Tab Bar */}
+                    <div className="tab-bar">
+                        <button
+                            className={cn("tab-item", activeTab === "summary" && "tab-item--active")}
+                            onClick={() => setActiveTab("summary")}
+                            id="tab-summary"
+                        >
+                            Summary
+                        </button>
+                        <button
+                            className={cn("tab-item", activeTab === "topology" && "tab-item--active")}
+                            onClick={() => setActiveTab("topology")}
+                            id="tab-topology"
+                        >
+                            Topology
+                        </button>
+                        <button
+                            className={cn("tab-item", activeTab === "triage" && "tab-item--active")}
+                            onClick={() => setActiveTab("triage")}
+                            id="tab-triage"
+                        >
+                            Triage
+                        </button>
+                    </div>
+
+                    {/* Tab Content */}
+                    {activeTab === "summary" && (
+                        <div className="space-y-8 animate-fade-scale-in">
+                            <ReportSummary summary={report.summary} />
+                            <FindingsTable vulnerabilities={report.vulnerabilities} />
+                        </div>
+                    )}
+
+                    {activeTab === "topology" && (
+                        <div className="animate-fade-scale-in">
+                            <AttackSurfaceGraph 
+                                targetUrl={report.target_url || scan.target_url} 
+                                vulnerabilities={report.vulnerabilities} 
+                            />
+                        </div>
+                    )}
+
+                    {activeTab === "triage" && (
+                        <TriageView vulnerabilities={report.vulnerabilities} />
+                    )}
                 </div>
             )}
 

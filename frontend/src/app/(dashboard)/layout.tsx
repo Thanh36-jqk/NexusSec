@@ -4,6 +4,7 @@ import {
     LayoutDashboard,
     ScanSearch,
     FileText,
+    GitCompareArrows,
     Settings,
     Activity,
 } from "lucide-react";
@@ -13,6 +14,7 @@ const NAV_ITEMS = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Scans", href: "/scans", icon: ScanSearch },
     { label: "Reports", href: "/reports", icon: FileText },
+    { label: "Diff", href: "/diff", icon: GitCompareArrows },
     { label: "Settings", href: "/settings", icon: Settings },
 ];
 

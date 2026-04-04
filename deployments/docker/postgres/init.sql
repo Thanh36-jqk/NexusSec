@@ -111,3 +111,26 @@ CREATE TRIGGER trg_targets_updated_at
 CREATE TRIGGER trg_scan_jobs_updated_at
     BEFORE UPDATE ON scan_jobs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ────────────────────────────────────────────────────────────
+--  VULNERABILITY_TRIAGE TABLE
+-- ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS vulnerability_triage (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    target_id         UUID          NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
+    vuln_fingerprint  VARCHAR(512)  NOT NULL,           -- deterministic hash/string: name|url|port
+    is_muted          BOOLEAN       NOT NULL DEFAULT FALSE,
+    is_false_positive BOOLEAN       NOT NULL DEFAULT FALSE,
+    notes             TEXT,
+    created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    UNIQUE (target_id, vuln_fingerprint) -- A target can only have one triage state per vulnerability footprint
+);
+
+-- Fast lookup for a target's triage rules
+CREATE INDEX idx_vuln_triage_target_id ON vulnerability_triage (target_id);
+
+CREATE TRIGGER trg_vulnerability_triage_updated_at
+    BEFORE UPDATE ON vulnerability_triage
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
