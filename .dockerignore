@@ -1,0 +1,20 @@
+# Exclude git directory
+.git/
+.github/
+
+# Exclude sensitive environment files
+.env
+.env.*
+
+# Exclude frontend dependencies
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Exclude local build output
+/bin/
+/dist/
+/tmp/
+
+# (Note: We explicitly DO NOT ignore .pem files here 
+# so that the CI pipeline can pass the generated JWT keys to docker build)
