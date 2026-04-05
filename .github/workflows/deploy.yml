@@ -18,6 +18,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set lower case repository name
+        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -35,9 +38,9 @@ jobs:
           context: .
           file: ./Dockerfile.gateway
           push: true
-          tags: ghcr.io/${{ github.repository }}/nexussec-gateway:latest
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-gateway:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-gateway:buildcache,mode=max
+          tags: ghcr.io/${{ env.REPO_LC }}/nexussec-gateway:latest
+          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LC }}/nexussec-gateway:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.REPO_LC }}/nexussec-gateway:buildcache,mode=max
 
       # Build and Push Worker
       - name: Build and push Worker
@@ -46,9 +49,9 @@ jobs:
           context: .
           file: ./Dockerfile.worker
           push: true
-          tags: ghcr.io/${{ github.repository }}/nexussec-worker:latest
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-worker:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-worker:buildcache,mode=max
+          tags: ghcr.io/${{ env.REPO_LC }}/nexussec-worker:latest
+          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LC }}/nexussec-worker:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.REPO_LC }}/nexussec-worker:buildcache,mode=max
 
       # Build and Push Frontend
       - name: Build and push Frontend
@@ -57,9 +60,9 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}/nexussec-frontend:latest
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-frontend:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-frontend:buildcache,mode=max
+          tags: ghcr.io/${{ env.REPO_LC }}/nexussec-frontend:latest
+          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LC }}/nexussec-frontend:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.REPO_LC }}/nexussec-frontend:buildcache,mode=max
 
   deploy-to-azure:
     name: Run Azure Deployment
@@ -83,8 +86,8 @@ jobs:
             # Pull repository updates (for Caddyfile, docker-compose.prod.yml)
             git pull origin main
             
-            # Explicitly export the repository name for docker-compose.prod.yml mapping
-            export GITHUB_REPOSITORY="${{ github.repository }}"
+            # Explicitly export the repository name downcased for docker-compose.prod.yml mapping
+            export GITHUB_REPOSITORY=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
             
             # Pull new GHCR images and restart seamlessly
             docker compose -f docker-compose.prod.yml pull
