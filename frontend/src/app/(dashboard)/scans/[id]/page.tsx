@@ -21,7 +21,8 @@ import { TriageView } from "@/components/triage/TriageView";
 import { AttackSurfaceGraph } from "@/components/topology/AttackSurfaceGraph";
 import { ScanDetailSkeleton } from "@/components/ui/skeleton-card";
 import { useTriageStore } from "@/stores/useTriageStore";
-import type { ScanJob, Report, WSMessage } from "@/types";
+import { fetchApi } from "@/lib/api";
+import type { ScanJob, Report, WSMessage, APIResponse } from "@/types";
 
 // ── Tab Types ────────────────────────────────────────────────
 
@@ -142,18 +143,15 @@ export default function ScanDetailPage() {
 
     const fetchScan = useCallback(async () => {
         try {
-            const res = await fetch(`${API_BASE}/scans/${jobId}`);
-            if (!res.ok) throw new Error(`Failed to fetch scan: ${res.status}`);
-
-            const json = await res.json();
+            const json = await fetchApi<APIResponse<ScanJob>>(`/scans/${jobId}`);
             setScan(json.data);
 
             // If already completed, fetch report immediately
             if (json.data.status === "completed" && json.data.report_id) {
                 await fetchReport();
             }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to load scan");
+        } catch (err: any) {
+            setError(err.message || "Failed to load scan");
         } finally {
             setLoading(false);
         }
@@ -162,29 +160,25 @@ export default function ScanDetailPage() {
     const fetchReport = useCallback(async () => {
         try {
             const [reportRes, triageRes] = await Promise.all([
-                fetch(`${API_BASE}/reports?scan_job_id=${jobId}`),
-                fetch(`${API_BASE}/scans/${jobId}/triage`)
+                fetchApi<APIResponse<Report[]>>(`/reports?scan_job_id=${jobId}`),
+                fetchApi<APIResponse<any[]>>(`/scans/${jobId}/triage`)
             ]);
 
-            if (reportRes.ok) {
-                const json = await reportRes.json();
-                setReport(json.data);
+            if (reportRes.data && reportRes.data.length > 0) {
+                setReport(reportRes.data[0]);
             }
 
-            if (triageRes.ok) {
-                const triageJson = await triageRes.json();
-                // Map array of rules to a Record<vuln_fingerprint, VulnTriageState>
-                const stateMap: Record<string, { is_muted: boolean; is_false_positive: boolean }> = {};
-                for (const rule of triageJson.data || []) {
-                    stateMap[rule.vuln_fingerprint] = {
-                        is_muted: rule.is_muted,
-                        is_false_positive: rule.is_false_positive,
-                    };
-                }
-                useTriageStore.getState().hydrateTriageStates(stateMap);
+            // Map array of rules to a Record<vuln_fingerprint, VulnTriageState>
+            const stateMap: Record<string, { is_muted: boolean; is_false_positive: boolean }> = {};
+            for (const rule of triageRes.data || []) {
+                stateMap[rule.vuln_fingerprint] = {
+                    is_muted: rule.is_muted,
+                    is_false_positive: rule.is_false_positive,
+                };
             }
-        } catch {
-            console.warn("Failed to fetch report or triage states");
+            useTriageStore.getState().hydrateTriageStates(stateMap);
+        } catch (err) {
+            console.warn("Failed to fetch report or triage states", err);
         }
     }, [jobId]);
 

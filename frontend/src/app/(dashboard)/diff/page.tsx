@@ -6,7 +6,8 @@ import { useScanDiff } from "@/hooks/useScanDiff";
 import { useTriageStore } from "@/stores/useTriageStore";
 import { TriageListItem } from "@/components/triage/TriageListItem";
 import { TriageDetailPanel } from "@/components/triage/TriageDetailPanel";
-import type { Vulnerability, Severity } from "@/types";
+import { fetchApi } from "@/lib/api";
+import type { Vulnerability, Severity, APIResponse } from "@/types";
 import {
     GitCompareArrows,
     AlertCircle,
@@ -90,20 +91,16 @@ export default function DiffPage() {
     useEffect(() => {
         async function loadScans() {
             try {
-                const res = await fetch(`${API_BASE}/scans`, {
-                    credentials: "include",
-                });
-                if (!res.ok) throw new Error(`${res.status}`);
-                const json = await res.json();
-                const all: ScanListItem[] = json.data ?? [];
+                const res = await fetchApi<APIResponse<ScanListItem[]>>(`/scans`);
+                const all: ScanListItem[] = res.data ?? [];
                 // Only completed scans have reports to diff
                 const completed = all.filter(
                     (s) => s.status.toUpperCase() === "COMPLETED"
                 );
                 setScans(completed);
-            } catch (err) {
+            } catch (err: any) {
                 setScanError(
-                    err instanceof Error ? err.message : "Failed to load scans"
+                    err.message || "Failed to load scans"
                 );
             } finally {
                 setLoadingScans(false);
@@ -114,12 +111,8 @@ export default function DiffPage() {
 
     // ── Fetch report for a scan ──────────────────────────────
     const fetchReport = useCallback(async (scanId: string): Promise<Vulnerability[]> => {
-        const res = await fetch(`${API_BASE}/scans/${scanId}/report`, {
-            credentials: "include",
-        });
-        if (!res.ok) throw new Error(`Failed to fetch report for scan ${scanId}`);
-        const json = await res.json();
-        return json.data?.vulnerabilities ?? [];
+        const res = await fetchApi<APIResponse<{ vulnerabilities?: Vulnerability[] }>>(`/scans/${scanId}/report`);
+        return res.data?.vulnerabilities ?? [];
     }, []);
 
     // ── Compare button handler ───────────────────────────────
@@ -409,7 +402,7 @@ export default function DiffPage() {
                                 "rounded-xl border p-4 cursor-pointer transition-all hover:scale-[1.02]",
                                 "bg-emerald-500/5 border-emerald-500/20",
                                 activeTab === "resolved" &&
-                                    "ring-2 ring-emerald-500/40"
+                                "ring-2 ring-emerald-500/40"
                             )}
                             onClick={() => switchTab("resolved")}
                         >
@@ -433,7 +426,7 @@ export default function DiffPage() {
                                 "rounded-xl border p-4 cursor-pointer transition-all hover:scale-[1.02]",
                                 "bg-gray-500/5 border-gray-500/20",
                                 activeTab === "unchanged" &&
-                                    "ring-2 ring-gray-500/40"
+                                "ring-2 ring-gray-500/40"
                             )}
                             onClick={() => switchTab("unchanged")}
                         >

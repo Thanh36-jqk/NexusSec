@@ -31,6 +31,6 @@ COPY --from=builder /app/worker .
 # must run with the docker group or appropriate permissions
 # configured via docker-compose volumes.
 RUN addgroup -S nexussec && adduser -S nexussec -G nexussec
-USER nexussec
+# USER nexussec
 
 ENTRYPOINT ["./worker"]

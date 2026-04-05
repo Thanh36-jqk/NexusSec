@@ -7,6 +7,8 @@ import type { Vulnerability, Severity } from "@/types";
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
 
+import { fetchApi } from "@/lib/api";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 import {
     X,
@@ -92,7 +94,7 @@ export function TriageDetailPanel({ vuln, onClose }: TriageDetailPanelProps) {
         
         if (!scanId) return;
         try {
-            const res = await fetch(`${API_BASE}/scans/${scanId}/triage/${encodeURIComponent(vuln.vuln_id)}`, {
+            await fetchApi(`/scans/${scanId}/triage/${encodeURIComponent(vuln.vuln_id)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -100,7 +102,6 @@ export function TriageDetailPanel({ vuln, onClose }: TriageDetailPanelProps) {
                     is_muted: triageState.is_muted
                 })
             });
-            if (!res.ok) throw new Error("API error");
         } catch {
             toggleFalsePositive(vuln.vuln_id); // Rollback
             toast.error("Failed to save False Positive state");
@@ -113,7 +114,7 @@ export function TriageDetailPanel({ vuln, onClose }: TriageDetailPanelProps) {
         
         if (!scanId) return;
         try {
-            const res = await fetch(`${API_BASE}/scans/${scanId}/triage/${encodeURIComponent(vuln.vuln_id)}`, {
+            await fetchApi(`/scans/${scanId}/triage/${encodeURIComponent(vuln.vuln_id)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -121,7 +122,6 @@ export function TriageDetailPanel({ vuln, onClose }: TriageDetailPanelProps) {
                     is_muted: nextState
                 })
             });
-            if (!res.ok) throw new Error("API error");
         } catch {
             toggleMuted(vuln.vuln_id); // Rollback
             toast.error("Failed to save Muted state");

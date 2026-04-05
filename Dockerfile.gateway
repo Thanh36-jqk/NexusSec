@@ -25,7 +25,7 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 COPY --from=builder /app/gateway .
-COPY keys/ ./keys/
+COPY deployments/jwt/ ./deployments/jwt/
 
 RUN addgroup -S nexussec && adduser -S nexussec -G nexussec
 USER nexussec

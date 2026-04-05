@@ -1,0 +1,18 @@
+nexussec.me, www.nexussec.me {
+
+    reverse_proxy /api/* gateway:8080
+    reverse_proxy /ws/* gateway:8080
+    reverse_proxy /* frontend:3000
+    
+    # Enable Gzip compression
+    encode gzip
+    
+    # Custom headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}

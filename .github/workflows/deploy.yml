@@ -1,82 +1,94 @@
-name: Deploy NexusSec to Azure VM
-
-# ══════════════════════════════════════════════════════════════
-#  Trigger: Push to main branch
-#  Target:  Azure VM B2s running Docker Compose
-#
-#  Flow:
-#    1. SSH into Azure VM
-#    2. Pull latest code
-#    3. Build all 3 application images (gateway, worker, frontend)
-#    4. Restart services with zero-downtime rolling approach
-#    5. Clean up dangling images
-#
-#  Required GitHub Secrets:
-#    SSH_HOST     — Azure VM public IP (or hostname)
-#    SSH_USER     — VM login user (e.g. azureuser)
-#    SSH_KEY      — Private SSH key (ed25519 or RSA)
-# ══════════════════════════════════════════════════════════════
+name: Deploy to GHCR and Azure
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
-  # Allow manual trigger from GitHub UI
-  workflow_dispatch:
+# Sets permissions of the GITHUB_TOKEN to allow pushing to GHCR
+permissions:
+  contents: read
+  packages: write
 
 jobs:
-  deploy:
-    name: Build & Deploy
+  build-and-push:
+    name: Build & Push to GHCR
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to Azure VM via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          command_timeout: 25m
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build and Push Gateway
+      - name: Build and push Gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.gateway
+          push: true
+          tags: ghcr.io/${{ github.repository }}/nexussec-gateway:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-gateway:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-gateway:buildcache,mode=max
+
+      # Build and Push Worker
+      - name: Build and push Worker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.worker
+          push: true
+          tags: ghcr.io/${{ github.repository }}/nexussec-worker:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-worker:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-worker:buildcache,mode=max
+
+      # Build and Push Frontend
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/nexussec-frontend:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-frontend:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/nexussec-frontend:buildcache,mode=max
+
+  deploy-to-azure:
+    name: Run Azure Deployment
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    
+    steps:
+      - name: Execute Remote SSH Commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            set -euo pipefail
-
-            echo "══════════════════════════════════════════"
-            echo "  NexusSec Deploy — $(date)"
-            echo "══════════════════════════════════════════"
-
-            # ── 1. Pull latest code ──────────────────────
-            cd ~/nexussec
-            echo "→ Pulling latest code..."
+            # Navigate to the project directory
+            cd /home/${{ secrets.VM_USERNAME }}/NexusSec
+            
+            # Authenticate Azure VM Docker with GHCR 
+            echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Pull repository updates (for Caddyfile, docker-compose.prod.yml)
             git pull origin main
-
-            # ── 2. Build all application images ──────────
-            echo "→ Building images..."
-            docker compose build --parallel gateway worker frontend
-
-            # ── 3. Restart services ──────────────────────
-            # Infrastructure services (postgres, mongodb, redis, rabbitmq)
-            # are long-running and rarely change. Only restart app services.
-            echo "→ Restarting application services..."
-            docker compose up -d gateway worker frontend nginx
-
-            # ── 4. Health check ──────────────────────────
-            echo "→ Waiting for services to stabilize..."
-            sleep 10
-
-            echo "→ Checking Nginx..."
-            curl -sf http://localhost/nginx-health || echo "⚠ Nginx not ready yet"
-
-            echo "→ Container status:"
-            docker compose ps
-
-            # ── 5. Cleanup ───────────────────────────────
-            echo "→ Cleaning up old images..."
+            
+            # Explicitly export the repository name for docker-compose.prod.yml mapping
+            export GITHUB_REPOSITORY="${{ github.repository }}"
+            
+            # Pull new GHCR images and restart seamlessly
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            
+            # Cleanup old dangling images to prevent disk space exhaustion
             docker image prune -f
-
-            echo "══════════════════════════════════════════"
-            echo "  ✅ Deploy complete!"
-            echo "══════════════════════════════════════════"

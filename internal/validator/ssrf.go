@@ -42,7 +42,6 @@ func init() {
 		"::1/128",         // IPv6 loopback
 		"fc00::/7",        // IPv6 unique local (private)
 		"fe80::/10",       // IPv6 link-local
-		"::ffff:0:0/96",   // IPv4-mapped IPv6
 	}
 
 	for _, cidr := range cidrs {
