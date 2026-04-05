@@ -21,6 +21,12 @@ jobs:
       - name: Set lower case repository name
         run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
+      - name: Generate JWT keys
+        run: |
+          mkdir -p deployments/jwt
+          openssl genpkey -algorithm RSA -out deployments/jwt/private.pem -pkeyopt rsa_keygen_bits:2048
+          openssl rsa -pubout -in deployments/jwt/private.pem -out deployments/jwt/public.pem
+
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
