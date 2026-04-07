@@ -51,6 +51,14 @@ func (c *Connection) Channel() *amqp.Channel {
 	return c.channel
 }
 
+// IsClosed returns true if the connection is closed.
+func (c *Connection) IsClosed() bool {
+	if c.conn == nil {
+		return true
+	}
+	return c.conn.IsClosed()
+}
+
 // DeclareQueueWithDLQ sets up the complete message topology:
 //
 //  1. Declares a Dead-Letter Exchange (DLX) — fanout type

@@ -131,7 +131,7 @@ export function TriageDetailPanel({ vuln, onClose }: TriageDetailPanelProps) {
     // ── Copy to Clipboard as Jira-formatted Markdown ────────
     const handleCopyForJira = useCallback(async () => {
         const lines = [
-            `## 🛡️ ${vuln.name}`,
+            `## 🛡️ ${vuln.title}`,
             ``,
             `| Field | Value |`,
             `|-------|-------|`,
@@ -147,7 +147,7 @@ export function TriageDetailPanel({ vuln, onClose }: TriageDetailPanelProps) {
             `### Description`,
             vuln.description || "_No description available._",
             ``,
-            vuln.solution ? `### Solution\n${vuln.solution}` : null,
+            vuln.remediation ? `### Remediation\n${vuln.remediation}` : null,
             vuln.reference ? `\n### References\n${vuln.reference}` : null,
         ].filter(Boolean).join("\n");
 
@@ -179,7 +179,7 @@ export function TriageDetailPanel({ vuln, onClose }: TriageDetailPanelProps) {
                     </div>
                     <div className="min-w-0">
                         <h3 className="text-sm font-semibold text-foreground leading-tight break-words">
-                            {vuln.name}
+                            {vuln.title}
                         </h3>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span
@@ -277,13 +277,13 @@ export function TriageDetailPanel({ vuln, onClose }: TriageDetailPanelProps) {
                 </div>
 
                 {/* Solution */}
-                {vuln.solution && (
+                {vuln.remediation && (
                     <div>
                         <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-400 mb-1.5">
-                            Solution
+                            Remediation
                         </p>
                         <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
-                            {vuln.solution}
+                            {vuln.remediation}
                         </p>
                     </div>
                 )}

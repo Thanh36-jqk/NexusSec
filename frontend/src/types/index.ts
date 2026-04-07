@@ -51,12 +51,14 @@ export interface ReportSummary {
 
 export interface Vulnerability {
     vuln_id: string;
-    name: string;
+    title: string;
     severity: Severity;
     cvss_score?: number;
     description: string;
     url?: string;
-    solution?: string;
+    param?: string;
+    evidence?: string;
+    remediation?: string;
     reference?: string;
     cwe?: string;
     port?: number;

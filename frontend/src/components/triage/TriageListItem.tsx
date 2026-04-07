@@ -100,7 +100,7 @@ const TriageListItem = memo(function TriageListItem({
                     <div className="flex items-center gap-2">
                         {/* Name */}
                         <span className="triage-row__name text-sm font-medium text-foreground truncate">
-                            {vuln.name}
+                            {vuln.title}
                         </span>
 
                         {/* False positive badge */}

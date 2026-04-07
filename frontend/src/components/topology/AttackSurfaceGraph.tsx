@@ -151,7 +151,7 @@ export function AttackSurfaceGraph({ targetUrl, vulnerabilities }: TopologyProps
                     id: vulnId,
                     type: "vuln",
                     position: { x: currentXOffset, y: V_SPACING * 2.2 },
-                    data: { label: v.name, severity: v.severity },
+                    data: { label: v.title, severity: v.severity },
                 });
 
                 // Edge from Port -> Vuln

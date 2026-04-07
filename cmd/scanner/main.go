@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/nexussec/nexussec/internal/infrastructure/broker"
+	"github.com/nexussec/nexussec/internal/infrastructure/cache"
 	"github.com/nexussec/nexussec/internal/infrastructure/config"
 	"github.com/nexussec/nexussec/internal/infrastructure/database"
 	mongorepo "github.com/nexussec/nexussec/internal/repository/mongo"
@@ -51,19 +52,26 @@ func main() {
 	}
 	defer rabbitConn.Close()
 
-	// ── 6. Initialize Docker Manager (isolated scan-network) ─
+	// ── 6. Connect to Redis ─────────────────────────────────
+	redisClient, err := cache.NewRedisClient(&cfg.Redis)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to connect to Redis")
+	}
+	defer redisClient.Close()
+
+	// ── 7. Initialize Docker Manager (isolated scan-network) ─
 	dockerMgr, err := executor.NewDockerManager(log, "bridge")
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to initialize Docker manager")
 	}
 	defer dockerMgr.Close()
 
-	// ── 7. Wire Repositories & Notifier ─────────────────────
+	// ── 8. Wire Repositories & Notifier ─────────────────────
 	scanJobRepo := pgrepo.NewScanJobRepo(pgDB)
 	reportRepo := mongorepo.NewReportRepo(mongoDB)
-	notifier := callback.NewNotifier(scanJobRepo, reportRepo, log)
+	notifier := callback.NewNotifier(scanJobRepo, reportRepo, redisClient, log)
 
-	// ── 8. Create and Start Worker Pool ─────────────────────
+	// ── 9. Create and Start Worker Pool ─────────────────────
 	scannerWorker := worker.New(
 		rabbitConn,
 		dockerMgr,

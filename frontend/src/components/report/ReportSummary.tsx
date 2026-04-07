@@ -10,6 +10,7 @@ import {
     AlertOctagon,
     type LucideIcon,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 interface ReportSummaryProps {
     summary: ReportSummaryType;
@@ -85,14 +86,14 @@ const SEVERITY_CARDS: SeverityCardConfig[] = [
  * - No pie charts: harder to read for small differences; bars are more precise
  */
 export function ReportSummary({ summary, className }: ReportSummaryProps) {
-    const maxCount = Math.max(
-        summary.critical,
-        summary.high,
-        summary.medium,
-        summary.low,
-        summary.info,
-        1 // prevent division by zero
-    );
+    const chartData = SEVERITY_CARDS.map((card) => ({
+        name: card.label,
+        value: summary[card.key],
+        color: card.key === "critical" ? "#ef4444" :
+               card.key === "high" ? "#f97316" :
+               card.key === "medium" ? "#f59e0b" :
+               card.key === "low" ? "#3b82f6" : "#6b7280"
+    })).filter(data => data.value > 0);
 
     return (
         <div className={cn("space-y-6", className)}>
@@ -143,44 +144,67 @@ export function ReportSummary({ summary, className }: ReportSummaryProps) {
                 })}
             </div>
 
-            {/* ── Distribution Bars ─────────────────────────────── */}
-            <div className="space-y-2.5 rounded-xl bg-card border border-border p-4">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
-                    Distribution
-                </p>
-                {SEVERITY_CARDS.map((card) => {
-                    const count = summary[card.key];
-                    const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
-
-                    return (
-                        <div key={card.key} className="flex items-center gap-3">
-                            <span
-                                className={cn(
-                                    "w-16 text-xs font-medium text-right shrink-0",
-                                    card.color
-                                )}
-                            >
-                                {card.label}
-                            </span>
-                            <div className="flex-1 h-2 rounded-full bg-muted/50 overflow-hidden">
-                                <div
-                                    className={cn(
-                                        "h-full rounded-full transition-all duration-500 ease-out",
-                                        card.key === "critical" && "bg-red-500",
-                                        card.key === "high" && "bg-orange-500",
-                                        card.key === "medium" && "bg-amber-500",
-                                        card.key === "low" && "bg-blue-500",
-                                        card.key === "info" && "bg-gray-500"
-                                    )}
-                                    style={{ width: `${percentage}%` }}
+            {/* ── Visual Charts using recharts ──────────────────────── */}
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="rounded-xl bg-card border border-border p-4 h-[300px] flex flex-col">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-4">
+                        Severity Distribution
+                    </p>
+                    <div className="flex-1 min-h-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={chartData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    stroke="none"
+                                >
+                                    {chartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ))}
+                                </Pie>
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "var(--card)",
+                                        borderColor: "var(--border)",
+                                        borderRadius: "8px",
+                                    }}
+                                    itemStyle={{ color: "var(--foreground)" }}
                                 />
-                            </div>
-                            <span className="w-8 text-xs tabular-nums font-mono text-muted-foreground text-right">
-                                {count}
-                            </span>
-                        </div>
-                    );
-                })}
+                                <Legend verticalAlign="bottom" height={36} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                <div className="rounded-xl bg-card border border-border p-4 flex flex-col justify-center">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-4">
+                        Distribution Metrics
+                    </p>
+                    <div className="space-y-4">
+                        {SEVERITY_CARDS.map((card) => {
+                            const count = summary[card.key];
+                            const percentage = summary.total > 0 ? Math.round((count / summary.total) * 100) : 0;
+
+                            return (
+                                <div key={card.key} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className={cn("w-3 h-3 rounded-full", card.key === "critical" && "bg-red-500", card.key === "high" && "bg-orange-500", card.key === "medium" && "bg-amber-500", card.key === "low" && "bg-blue-500", card.key === "info" && "bg-gray-500")} />
+                                        <span className="text-sm font-medium text-foreground">{card.label}</span>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-sm text-muted-foreground">{count}</span>
+                                        <span className="text-sm font-mono text-muted-foreground w-12 text-right">{percentage}%</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
         </div>
     );

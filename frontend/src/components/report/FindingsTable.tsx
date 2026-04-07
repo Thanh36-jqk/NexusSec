@@ -70,7 +70,7 @@ export function FindingsTable({ vulnerabilities, className }: FindingsTableProps
     const filtered = vulnerabilities.filter((v) => {
         const q = searchTerm.toLowerCase();
         return (
-            v.name.toLowerCase().includes(q) ||
+            v.title.toLowerCase().includes(q) ||
             v.description.toLowerCase().includes(q) ||
             (v.cwe?.toLowerCase().includes(q) ?? false)
         );
@@ -178,9 +178,9 @@ export function FindingsTable({ vulnerabilities, className }: FindingsTableProps
                                                     </span>
                                                 </div>
 
-                                                {/* Name */}
+                                                {/* Title */}
                                                 <div className="truncate pr-4">
-                                                    <span className="text-sm font-medium text-foreground">{vuln.name}</span>
+                                                    <span className="text-sm font-medium text-foreground">{vuln.title}</span>
                                                 </div>
 
                                                 {/* CWE */}
@@ -214,14 +214,36 @@ export function FindingsTable({ vulnerabilities, className }: FindingsTableProps
                                                         </p>
                                                     </div>
 
-                                                    {vuln.solution && (
+                                                    {vuln.remediation && (
                                                         <div>
                                                             <p className="text-xs font-medium uppercase tracking-wider text-emerald-400 mb-1">
-                                                                Solution
+                                                                Remediation
                                                             </p>
                                                             <p className="text-sm text-foreground/80 leading-relaxed">
-                                                                {vuln.solution}
+                                                                {vuln.remediation}
                                                             </p>
+                                                        </div>
+                                                    )}
+
+                                                    {vuln.evidence && (
+                                                        <div>
+                                                            <p className="text-xs font-medium uppercase tracking-wider text-red-400 mb-1">
+                                                                Evidence Logic
+                                                            </p>
+                                                            <div className="bg-red-500/10 border border-red-500/20 p-2 rounded-md font-mono text-xs text-red-400 max-h-32 overflow-y-auto">
+                                                                {vuln.evidence}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {vuln.param && (
+                                                        <div>
+                                                            <p className="text-xs font-medium uppercase tracking-wider text-amber-400 mb-1">
+                                                                Vulnerable Parameter
+                                                            </p>
+                                                            <span className="inline-flex items-center gap-1.5 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-mono text-amber-400">
+                                                                {vuln.param}
+                                                            </span>
                                                         </div>
                                                     )}
 

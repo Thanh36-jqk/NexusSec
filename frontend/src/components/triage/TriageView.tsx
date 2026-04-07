@@ -84,7 +84,7 @@ export function TriageView({ vulnerabilities }: TriageViewProps) {
                 // Search filter
                 if (q) {
                     const match =
-                        v.name.toLowerCase().includes(q) ||
+                        v.title.toLowerCase().includes(q) ||
                         v.description.toLowerCase().includes(q) ||
                         (v.cwe?.toLowerCase().includes(q) ?? false) ||
                         (v.vuln_id?.toLowerCase().includes(q) ?? false) ||

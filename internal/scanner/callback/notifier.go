@@ -2,32 +2,37 @@ package callback
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/nexussec/nexussec/internal/domain/enum"
 	"github.com/nexussec/nexussec/internal/domain/model"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
 
 // Notifier handles post-scan state transitions:
 // updating job status in PostgreSQL and storing reports in MongoDB.
 type Notifier struct {
-	jobRepo    model.ScanJobRepository
-	reportRepo model.ReportRepository
-	logger     zerolog.Logger
+	jobRepo     model.ScanJobRepository
+	reportRepo  model.ReportRepository
+	redisClient *redis.Client
+	logger      zerolog.Logger
 }
 
 // NewNotifier creates a notifier with injected repository dependencies.
 func NewNotifier(
 	jobRepo model.ScanJobRepository,
 	reportRepo model.ReportRepository,
+	redisClient *redis.Client,
 	logger zerolog.Logger,
 ) *Notifier {
 	return &Notifier{
-		jobRepo:    jobRepo,
-		reportRepo: reportRepo,
-		logger:     logger,
+		jobRepo:     jobRepo,
+		reportRepo:  reportRepo,
+		redisClient: redisClient,
+		logger:      logger,
 	}
 }
 
@@ -71,7 +76,15 @@ func (n *Notifier) MarkCompleted(ctx context.Context, jobID string, report *mode
 
 	// 4. Transition to COMPLETED
 	log.Info().Str("report_id", reportID).Msg("job status → COMPLETED")
-	return n.jobRepo.UpdateStatus(ctx, jobID, enum.ScanStatusCompleted)
+	err = n.jobRepo.UpdateStatus(ctx, jobID, enum.ScanStatusCompleted)
+	
+	if n.redisClient != nil && err == nil {
+		channel := "scan_progress:" + jobID
+		payload := `{"type":"scan_completed","progress":100,"status":"completed"}`
+		n.redisClient.Publish(ctx, channel, payload)
+	}
+
+	return err
 }
 
 // MarkFailed transitions the job to FAILED and records the error message.
@@ -83,12 +96,34 @@ func (n *Notifier) MarkFailed(ctx context.Context, jobID string, errMsg string) 
 		return err
 	}
 
-	return n.jobRepo.UpdateStatus(ctx, jobID, enum.ScanStatusFailed)
+	err := n.jobRepo.UpdateStatus(ctx, jobID, enum.ScanStatusFailed)
+
+	if n.redisClient != nil && err == nil {
+		channel := "scan_progress:" + jobID
+		// Create JSON securely with properly escaped error message
+		payload := fmt.Sprintf(`{"type":"scan_failed","status":"failed","error":"%s"}`, strings.ReplaceAll(errMsg, `"`, `\"`))
+		n.redisClient.Publish(ctx, channel, payload)
+	}
+
+	return err
 }
 
 // UpdateProgress updates the job's progress percentage (0–100).
 func (n *Notifier) UpdateProgress(ctx context.Context, jobID string, progress int) error {
-	return n.jobRepo.UpdateProgress(ctx, jobID, progress)
+	// 1. Update in PostgreSQL
+	err := n.jobRepo.UpdateProgress(ctx, jobID, progress)
+	if err != nil {
+		return err
+	}
+
+	// 2. Publish to Redis for real-time WebSockets
+	if n.redisClient != nil {
+		channel := "scan_progress:" + jobID
+		payload := fmt.Sprintf(`{"type":"progress_update","progress":%d,"status":"running"}`, progress)
+		n.redisClient.Publish(ctx, channel, payload)
+	}
+
+	return nil
 }
 
 // computeSummary counts vulnerabilities by severity level.

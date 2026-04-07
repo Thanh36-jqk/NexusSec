@@ -57,6 +57,8 @@ type Vulnerability struct {
 	CWE         string  `json:"cwe,omitempty" bson:"cwe,omitempty"`
 	Reference   string  `json:"reference,omitempty" bson:"reference,omitempty"`
 	URL         string  `json:"url,omitempty" bson:"url,omitempty"`
+	Param       string  `json:"param,omitempty" bson:"param,omitempty"`
+	Evidence    string  `json:"evidence,omitempty" bson:"evidence,omitempty"`
 	Port        int     `json:"port,omitempty" bson:"port,omitempty"`
 	Protocol    string  `json:"protocol,omitempty" bson:"protocol,omitempty"`
 	Service     string  `json:"service,omitempty" bson:"service,omitempty"`

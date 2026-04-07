@@ -29,7 +29,7 @@ export interface DiffResult {
 // Performance: string concatenation + Map.set = O(1) amortized.
 
 function getVulnKey(v: Vulnerability): string {
-    return `${v.vuln_id}|${v.name}|${v.url ?? ""}|${v.port ?? 0}|${v.protocol ?? ""}`;
+    return `${v.vuln_id}|${v.title}|${v.url ?? ""}|${v.port ?? 0}|${v.protocol ?? ""}`;
 }
 
 // ── Diff Algorithm ───────────────────────────────────────────

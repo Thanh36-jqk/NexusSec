@@ -117,10 +117,15 @@ func main() {
 
 	triageHandler := handler.NewTriageHandler(pgDB, log)
 
+	wsHandler := handler.NewWSHandler(redisClient, log)
+
 	// ── 8. Wire Dependencies & Setup Router ─────────────────
 	deps := &router.Dependencies{
 		Logger:         log,
 		RedisClient:    redisClient,
+		PgDB:           pgDB,
+		MongoClient:    mongoClient,
+		RabbitConn:     rabbitConn,
 		AllowedOrigins: cfg.CORS.AllowedOrigins,
 		JWTPublicKey:   jwtPublicKey,
 		JWTIssuer:      cfg.JWT.Issuer,
@@ -129,6 +134,7 @@ func main() {
 		TargetHandler:  targetHandler,
 		ReportHandler:  reportHandler,
 		TriageHandler:  triageHandler,
+		WSHandler:      wsHandler,
 	}
 
 	engine := router.Setup(deps)

@@ -5,10 +5,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
 	"github.com/nexussec/nexussec/internal/gateway/handler"
 	"github.com/nexussec/nexussec/internal/gateway/middleware"
+	"github.com/nexussec/nexussec/internal/infrastructure/broker"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Dependencies holds all injected dependencies for the router.
@@ -16,6 +19,9 @@ import (
 type Dependencies struct {
 	Logger         zerolog.Logger
 	RedisClient    *redis.Client
+	PgDB           *sqlx.DB
+	MongoClient    *mongo.Client
+	RabbitConn     *broker.Connection
 	AllowedOrigins []string
 	JWTPublicKey   *rsa.PublicKey // RS256 public key for token verification
 	JWTIssuer      string
@@ -24,6 +30,7 @@ type Dependencies struct {
 	TargetHandler  *handler.TargetHandler // Target management (PG)
 	ReportHandler  *handler.ReportHandler // Report retrieval (PG + MongoDB)
 	TriageHandler  *handler.TriageHandler // Triage persistence (PG)
+	WSHandler      *handler.WSHandler     // WebSocket real-time updates (Redis)
 }
 
 // Setup creates the Gin engine with all routes, middleware, and handlers wired.
@@ -53,7 +60,13 @@ func Setup(deps *Dependencies) *gin.Engine {
 	engine.Use(globalRateLimiter.Handler())
 
 	// ── Health Check (public, no auth) ──────────────────────
-	healthHandler := handler.NewHealthHandler(deps.Logger)
+	healthHandler := handler.NewHealthHandler(
+		deps.Logger,
+		deps.PgDB,
+		deps.MongoClient,
+		deps.RedisClient,
+		deps.RabbitConn,
+	)
 
 	health := engine.Group("/health")
 	{
@@ -112,6 +125,13 @@ func Setup(deps *Dependencies) *gin.Engine {
 				scans.GET("/:id/triage", deps.TriageHandler.GetTriageRules)
 				scans.PUT("/:id/triage/:fingerprint", deps.TriageHandler.UpsertTriageRule)
 			}
+		}
+
+		// ── WebSockets
+		// The frontend connects to WS_URL?job_id=xxx.
+		ws := v1.Group("/ws")
+		{
+			ws.GET("", deps.WSHandler.StreamProgress)
 		}
 	}
 
