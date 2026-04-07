@@ -197,6 +197,9 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
       RABBITMQ_HOST:         rabbitmq
       RABBITMQ_PORT:         5672
+      REDIS_HOST:        redis
+      REDIS_PORT:        6379
+      REDIS_PASSWORD:    ${REDIS_PASSWORD}
       SCAN_NETWORK:        scan-network
       SCANNER_CONCURRENCY: ${SCANNER_CONCURRENCY:-2}
       PROXY_TIMEOUT:       ${PROXY_TIMEOUT:-120s}

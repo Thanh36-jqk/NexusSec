@@ -31,7 +31,24 @@ type ReportTab = "summary" | "topology" | "triage";
 // ── API Config ───────────────────────────────────────────────
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
+
+/**
+ * Derive WebSocket URL dynamically from current page origin.
+ * - Production: https://nexussec.me → wss://nexussec.me/ws
+ * - Development: http://localhost:3000 → ws://localhost:8080/ws
+ */
+function getWSUrl(): string {
+    if (typeof window === "undefined") return "ws://localhost:8080/api/v1/ws";
+    const env = process.env.NEXT_PUBLIC_WS_URL;
+    if (env) return env;
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    // In dev, Next.js runs on :3000 but the gateway is on :8080
+    if (host.includes("localhost") || host.includes("127.0.0.1")) {
+        return `ws://localhost:8080/api/v1/ws`;
+    }
+    return `${proto}//${host}/api/v1/ws`;
+}
 
 // ── Status Badge Component ───────────────────────────────────
 
@@ -135,7 +152,7 @@ export default function ScanDetailPage() {
     );
 
     const { connectionState } = useWebSocket({
-        url: `${WS_URL}?job_id=${jobId}`,
+        url: `${getWSUrl()}?job_id=${jobId}`,
         onMessage: handleWSMessage,
     });
 
