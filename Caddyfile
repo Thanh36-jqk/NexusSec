@@ -3,13 +3,7 @@ nexussec.me, www.nexussec.me {
     reverse_proxy /api/* gateway:8080
     reverse_proxy /health/* gateway:8080
 
-    # WebSocket — requires explicit upgrade handling
-    @websocket {
-        path /api/v1/ws*
-        header Connection *Upgrade*
-        header Upgrade    websocket
-    }
-    reverse_proxy @websocket gateway:8080
+
 
     reverse_proxy /* frontend:3000
     
