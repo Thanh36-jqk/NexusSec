@@ -24,10 +24,11 @@ RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
-COPY --from=builder /app/gateway .
-COPY deployments/jwt/ ./deployments/jwt/
-
 RUN addgroup -S nexussec && adduser -S nexussec -G nexussec
+
+COPY --from=builder --chown=nexussec:nexussec /app/gateway .
+COPY --chown=nexussec:nexussec deployments/jwt/ ./deployments/jwt/
+
 USER nexussec
 
 EXPOSE 8080
