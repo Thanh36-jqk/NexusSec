@@ -177,12 +177,12 @@ export default function ScanDetailPage() {
     const fetchReport = useCallback(async () => {
         try {
             const [reportRes, triageRes] = await Promise.all([
-                fetchApi<APIResponse<Report[]>>(`/reports?scan_job_id=${jobId}`),
+                fetchApi<APIResponse<Report>>(`/scans/${jobId}/report`),
                 fetchApi<APIResponse<any[]>>(`/scans/${jobId}/triage`)
             ]);
 
-            if (reportRes.data && reportRes.data.length > 0) {
-                setReport(reportRes.data[0]);
+            if (reportRes.data) {
+                setReport(reportRes.data);
             }
 
             // Map array of rules to a Record<vuln_fingerprint, VulnTriageState>

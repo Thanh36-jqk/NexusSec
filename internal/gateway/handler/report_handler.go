@@ -57,11 +57,11 @@ type MongoVuln struct {
 // Frontend chỉ cần đọc 1 format duy nhất — bất kể tool nào quét.
 type CleanVulnerability struct {
 	VulnID      string  `json:"vuln_id"`
-	Name        string  `json:"name"`
+	Title       string  `json:"title"`
 	Severity    string  `json:"severity"`
 	CVSSScore   float64 `json:"cvss_score,omitempty"`
 	URL         string  `json:"url,omitempty"`
-	Solution    string  `json:"solution,omitempty"`
+	Remediation string  `json:"remediation,omitempty"`
 	Port        int     `json:"port,omitempty"`
 	Protocol    string  `json:"protocol,omitempty"`
 	Service     string  `json:"service,omitempty"`
@@ -194,12 +194,12 @@ func (h *ReportHandler) GetReport(c *gin.Context) {
 	cleanVulns := make([]CleanVulnerability, 0, len(report.Vulnerabilities))
 	for _, v := range report.Vulnerabilities {
 		cleanVulns = append(cleanVulns, CleanVulnerability{
-			VulnID:     v.VulnID,
-			Name:       v.Title,
-			Severity:   v.Severity,
-			CVSSScore:  v.CVSSScore,
-			URL:        v.URL,
-			Solution:   v.Remediation,
+			VulnID:      v.VulnID,
+			Title:       v.Title,
+			Severity:    v.Severity,
+			CVSSScore:   v.CVSSScore,
+			URL:         v.URL,
+			Remediation: v.Remediation,
 			Port:       v.Port,
 			Protocol:   v.Protocol,
 			Service:    v.Service,
