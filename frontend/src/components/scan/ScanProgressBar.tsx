@@ -29,7 +29,14 @@ const STATUS_CONFIG: Record<ScanStatus, { color: string; bgColor: string; label:
 export function ScanProgressBar({ progress, status, className }: ScanProgressBarProps) {
     const config = STATUS_CONFIG[status];
     const isActive = status === "running";
-    const clampedProgress = Math.min(100, Math.max(0, progress));
+
+    // For completed scans the DB progress column is often 0 (not updated after the
+    // WebSocket stream ends). Always show full bar for terminal statuses.
+    const effectiveProgress =
+        status === "completed" ? 100 :
+        status === "failed"    ? 100 :  // show full red bar on failure
+        progress;
+    const clampedProgress = Math.min(100, Math.max(0, effectiveProgress));
 
     return (
         <div className={cn("space-y-2", className)}>
