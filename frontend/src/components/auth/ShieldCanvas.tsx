@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-// ── 3D Particle Shield Canvas ────────────────────────────────
+// ── 3D Particle Globe Canvas ────────────────────────────────
 
 interface Particle {
     x: number;
@@ -17,57 +17,29 @@ interface Particle {
     size: number;
     opacity: number;
     color: string;
-    isShield: boolean;
+    isGlobe: boolean;
 }
 
-function generateShieldPoints(count: number, cx: number, cy: number, scale: number): Array<[number, number, number]> {
+function generateGlobePoints(count: number, cx: number, cy: number, radius: number): Array<[number, number, number]> {
     const pts: Array<[number, number, number]> = [];
+    const goldenRatio = (1 + Math.sqrt(5)) / 2;
 
-    // Shield outline path (normalized -1 to 1)
-    const shieldPath = [
-        [0, -1.0], [0.55, -0.85], [0.85, -0.5], [0.85, 0.1],
-        [0.5, 0.6], [0, 1.0], [-0.5, 0.6], [-0.85, 0.1],
-        [-0.85, -0.5], [-0.55, -0.85],
-    ];
+    for (let i = 0; i < count; i++) {
+        // Fibonacci sphere
+        const t = i / count;
+        const phi = Math.acos(1 - 2 * t);
+        const theta = 2 * Math.PI * i / goldenRatio;
 
-    // Fill interior points
-    const gridSize = Math.sqrt(count);
-    for (let i = 0; i < gridSize; i++) {
-        for (let j = 0; j < gridSize; j++) {
-            const nx = (i / gridSize) * 2 - 1;
-            const ny = (j / gridSize) * 2 - 1;
-            // Rough inside-shield check
-            const r = Math.sqrt(nx * nx + ny * ny);
-            const angle = Math.atan2(nx, -ny) / Math.PI; // 0..1
-            const maxR = ny > 0.6 ? (1 - ny) * 1.1 : (0.85 - Math.abs(nx) * 0.05);
-            if (r < maxR && ny < 0.95) {
-                const depth = (1 - r) * 0.6;
-                const jitter = (Math.random() - 0.5) * 0.04;
-                pts.push([
-                    cx + nx * scale + jitter * scale,
-                    cy + ny * scale + jitter * scale,
-                    depth * 80 + Math.random() * 20,
-                ]);
-            }
-        }
-    }
+        const x = Math.sin(phi) * Math.cos(theta);
+        const y = Math.cos(phi);
+        const z = Math.sin(phi) * Math.sin(theta);
 
-    // Outline ring
-    for (let t = 0; t < Math.PI * 2; t += 0.07) {
-        // Compute a shield-like radius for this angle
-        const cosT = Math.cos(t), sinT = Math.sin(t);
-        const a = Math.atan2(sinT, cosT);
-        const ang = a / Math.PI;
-        const rout = Math.abs(cosT) < 0.3 ? 0.88 : 0.85 - Math.abs(cosT) * 0.06;
-        const nx = cosT * rout, ny = sinT * rout;
-        if (ny > 0.92) continue; // trim shield bottom point
         pts.push([
-            cx + nx * scale,
-            cy + ny * scale,
-            (Math.random() - 0.5) * 20,
+            cx + x * radius,
+            cy + y * radius,
+            z * radius,
         ]);
     }
-
     return pts;
 }
 
@@ -85,9 +57,15 @@ export default function ShieldParticleCanvas() {
         let animId: number;
         let W = 0, H = 0;
         let particles: Particle[] = [];
-        let mouseX = 0, mouseY = 0;
+        
         let rotX = 0, rotY = 0;
         let targetRotX = 0, targetRotY = 0;
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+        
+        let zoom = 1;
+        let targetZoom = 1;
 
         function resize() {
             W = canvas!.offsetWidth;
@@ -101,45 +79,45 @@ export default function ShieldParticleCanvas() {
         function buildParticles() {
             particles = [];
             const cx = W / 2, cy = H / 2;
-            const scale = Math.min(W, H) * 0.35;
-            const shieldPts = generateShieldPoints(480, cx, cy, scale);
+            const radius = Math.min(W, H) * 0.35;
+            const globePts = generateGlobePoints(800, cx, cy, radius);
 
-            // Shield particles
-            for (const [x, y, z] of shieldPts) {
+            // Globe particles
+            for (const [x, y, z] of globePts) {
                 const color = COLORS[Math.floor(Math.random() * COLORS.length)];
                 particles.push({
                     x, y, z,
                     baseX: x, baseY: y, baseZ: z,
                     vx: 0, vy: 0, vz: 0,
-                    size: Math.random() * 1.6 + 0.5,
-                    opacity: Math.random() * 0.5 + 0.5,
+                    size: Math.random() * 1.5 + 0.8,
+                    opacity: Math.random() * 0.6 + 0.4,
                     color,
-                    isShield: true,
+                    isGlobe: true,
                 });
             }
 
             // Ambient floating particles (background depth)
-            for (let i = 0; i < 120; i++) {
+            for (let i = 0; i < 150; i++) {
                 const x = Math.random() * W;
                 const y = Math.random() * H;
-                const z = Math.random() * 200 - 100;
+                const z = Math.random() * 400 - 200;
                 particles.push({
                     x, y, z,
                     baseX: x, baseY: y, baseZ: z,
-                    vx: (Math.random() - 0.5) * 0.15,
-                    vy: (Math.random() - 0.5) * 0.15,
+                    vx: (Math.random() - 0.5) * 0.2,
+                    vy: (Math.random() - 0.5) * 0.2,
                     vz: 0,
                     size: Math.random() * 1.2 + 0.2,
                     opacity: Math.random() * 0.3 + 0.05,
                     color: "#ffffff",
-                    isShield: false,
+                    isGlobe: false,
                 });
             }
         }
 
-        function project(x: number, y: number, z: number, cx: number, cy: number) {
+        function project(x: number, y: number, z: number, cx: number, cy: number, currentZoom: number) {
             const focalLength = 400;
-            const scale = focalLength / (focalLength + z);
+            const scale = focalLength / (focalLength + z) * currentZoom;
             return {
                 sx: cx + (x - cx) * scale,
                 sy: cy + (y - cy) * scale,
@@ -148,17 +126,20 @@ export default function ShieldParticleCanvas() {
         }
 
         function rotatePoint(x: number, y: number, z: number, cx: number, cy: number, rx: number, ry: number) {
-            // Rotate around Y axis
-            const dx = x - cx, dz = z;
-            const cosY = Math.cos(ry), sinY = Math.sin(ry);
-            const nx = dx * cosY + dz * sinY;
-            const nz = -dx * sinY + dz * cosY;
+            // Translate to origin
+            const dx = x - cx;
+            const dy = y - cy;
+            const dz = z;
 
             // Rotate around X axis
-            const dy = y - cy;
             const cosX = Math.cos(rx), sinX = Math.sin(rx);
-            const ny = dy * cosX - nz * sinX;
-            const nz2 = dy * sinX + nz * cosX;
+            const ny = dy * cosX - dz * sinX;
+            const nz = dy * sinX + dz * cosX;
+
+            // Rotate around Y axis
+            const cosY = Math.cos(ry), sinY = Math.sin(ry);
+            const nx = dx * cosY + nz * sinY;
+            const nz2 = -dx * sinY + nz * cosY;
 
             return { x: cx + nx, y: cy + ny, z: nz2 };
         }
@@ -169,14 +150,19 @@ export default function ShieldParticleCanvas() {
             ctx!.clearRect(0, 0, W, H);
 
             t += 0.005;
-            // Smooth rotation toward mouse
-            targetRotY = (mouseX / W - 0.5) * 0.5;
-            targetRotX = (mouseY / H - 0.5) * 0.35;
-            rotX += (targetRotX - rotX) * 0.04;
-            rotY += (targetRotY - rotY) * 0.04;
+            
+            // Smooth zoom interpolation
+            zoom += (targetZoom - zoom) * 0.1;
 
-            // Add slow auto-rotate
-            const autoRY = rotY + Math.sin(t * 0.3) * 0.08;
+            if (!isDragging) {
+                // Auto rotate when not dragging
+                targetRotY -= 0.002;
+                targetRotX += (Math.sin(t) * 0.1 - targetRotX) * 0.02; 
+            }
+
+            // Smooth rotation interpolation
+            rotX += (targetRotX - rotX) * 0.1;
+            rotY += (targetRotY - rotY) * 0.1;
 
             const cx = W / 2, cy = H / 2;
 
@@ -184,28 +170,51 @@ export default function ShieldParticleCanvas() {
             const sorted = particles
                 .map(p => {
                     let bx = p.baseX, by = p.baseY, bz = p.baseZ;
-                    if (!p.isShield) {
+                    if (!p.isGlobe) {
                         // Ambient particles drift
                         bx = p.baseX + Math.sin(t * 0.5 + p.baseY) * 8;
                         by = p.baseY + Math.cos(t * 0.4 + p.baseX) * 5;
+                        bz = p.baseZ;
+                        
+                        // Only rotate ambient particles slightly for parallax effect
+                        const r = rotatePoint(bx, by, bz, cx, cy, rotX * 0.2, rotY * 0.2);
+                        const proj = project(r.x, r.y, r.z, cx, cy, 1); // Background doesn't zoom as much
+                        return { p, ...proj, rz: r.z };
                     }
-                    const r = rotatePoint(bx, by, bz, cx, cy, rotX, autoRY);
-                    const proj = project(r.x, r.y, r.z, cx, cy);
+                    
+                    // Globe particles rotate fully
+                    const r = rotatePoint(bx, by, bz, cx, cy, rotX, rotY);
+                    const proj = project(r.x, r.y, r.z, cx, cy, zoom);
                     return { p, ...proj, rz: r.z };
                 })
                 .sort((a, b) => a.rz - b.rz);
 
             for (const { p, sx, sy, scale, rz } of sorted) {
                 const depth = Math.min(1, Math.max(0, (rz + 200) / 400));
+                
+                // Hide particles that are too close into the screen to prevent massive clipping
+                if (scale < 0) continue; 
+                
                 const sz = p.size * scale;
-                const alpha = p.opacity * (0.4 + depth * 0.6);
+                let alpha = p.opacity;
+                
+                if (p.isGlobe) {
+                    // Back side of the globe fades out
+                    if (rz > 0) {
+                        alpha *= Math.max(0.1, 1 - (rz / 150));
+                    }
+                } else {
+                    alpha *= (0.4 + depth * 0.6);
+                }
 
-                // Pulsing glow for shield points
-                if (p.isShield) {
-                    const pulse = 0.6 + Math.sin(t * 2 + p.baseX * 0.05 + p.baseY * 0.05) * 0.4;
-                    const glowR = sz * 3 * pulse;
+                if (alpha <= 0.01) continue;
+
+                // Pulsing glow for globe points on the front side
+                if (p.isGlobe && rz < 0) {
+                    const pulse = 0.6 + Math.sin(t * 3 + p.baseX * 0.05 + p.baseY * 0.05) * 0.4;
+                    const glowR = sz * 2.5 * pulse;
                     const g = ctx!.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-                    g.addColorStop(0, `${p.color}${Math.floor(alpha * 140).toString(16).padStart(2, "0")}`);
+                    g.addColorStop(0, `${p.color}${Math.floor(alpha * 120).toString(16).padStart(2, "0")}`);
                     g.addColorStop(1, "transparent");
                     ctx!.fillStyle = g;
                     ctx!.beginPath();
@@ -222,28 +231,88 @@ export default function ShieldParticleCanvas() {
             }
         }
 
-        function onMouseMove(e: MouseEvent) {
-            const rect = canvas!.getBoundingClientRect();
-            mouseX = e.clientX - rect.left;
-            mouseY = e.clientY - rect.top;
+        function onMouseDown(e: MouseEvent) {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            if (canvas) canvas.style.cursor = "grabbing";
         }
+        
+        function onMouseMove(e: MouseEvent) {
+            if (!isDragging) return;
+            
+            const dx = e.clientX - lastMouseX;
+            const dy = e.clientY - lastMouseY;
+            
+            targetRotY -= dx * 0.01;
+            targetRotX -= dy * 0.01; 
+            
+            targetRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, targetRotX));
+            
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        }
+        
+        function onMouseUp() {
+            isDragging = false;
+            if (canvas) canvas.style.cursor = "grab";
+        }
+
+        function onWheel(e: WheelEvent) {
+            e.preventDefault();
+            // Zoom bounds: 0.5 (zoom out) to 2.5 (zoom in)
+            targetZoom -= e.deltaY * 0.001;
+            targetZoom = Math.max(0.6, Math.min(2.5, targetZoom));
+        }
+
+        function onTouchStart(e: TouchEvent) {
+            isDragging = true;
+            lastMouseX = e.touches[0].clientX;
+            lastMouseY = e.touches[0].clientY;
+        }
+
         function onTouchMove(e: TouchEvent) {
-            const rect = canvas!.getBoundingClientRect();
-            mouseX = e.touches[0].clientX - rect.left;
-            mouseY = e.touches[0].clientY - rect.top;
+            if (!isDragging) return;
+            const dx = e.touches[0].clientX - lastMouseX;
+            const dy = e.touches[0].clientY - lastMouseY;
+            
+            targetRotY -= dx * 0.01;
+            targetRotX -= dy * 0.01;
+            targetRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, targetRotX));
+            
+            lastMouseX = e.touches[0].clientX;
+            lastMouseY = e.touches[0].clientY;
         }
 
         resize();
         window.addEventListener("resize", resize);
-        canvas.addEventListener("mousemove", onMouseMove);
-        canvas.addEventListener("touchmove", onTouchMove, { passive: true });
+        
+        canvas.addEventListener("mousedown", onMouseDown);
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+        // Passive false is needed to prevent default scrolling while zooming
+        canvas.addEventListener("wheel", onWheel, { passive: false });
+        
+        canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+        window.addEventListener("touchmove", onTouchMove, { passive: true });
+        window.addEventListener("touchend", onMouseUp);
+        
+        if (canvas) canvas.style.cursor = "grab";
+        
         animate();
 
         return () => {
             cancelAnimationFrame(animId);
             window.removeEventListener("resize", resize);
-            canvas.removeEventListener("mousemove", onMouseMove);
-            canvas.removeEventListener("touchmove", onTouchMove);
+            
+            canvas.removeEventListener("mousedown", onMouseDown);
+            window.removeEventListener("mousemove", onMouseMove);
+            window.removeEventListener("mouseup", onMouseUp);
+            canvas.removeEventListener("wheel", onWheel);
+            
+            canvas.removeEventListener("touchstart", onTouchStart);
+            window.removeEventListener("touchmove", onTouchMove);
+            window.removeEventListener("touchend", onMouseUp);
         };
     }, []);
 
