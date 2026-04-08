@@ -297,3 +297,72 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		Role:     user.Role,
 	})
 }
+
+// ── Change Password ──────────────────────────────────────────
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password"     binding:"required,min=8,max=72"`
+}
+
+// ChangePassword updates the authenticated user's password.
+//
+//	PUT /api/v1/auth/password
+//	Body: { "current_password": "...", "new_password": "..." }
+//	Response: 200 OK
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	userID := c.GetString(middleware.ContextKeyUserID)
+	if userID == "" {
+		response.Unauthorized(c, "unauthorized")
+		return
+	}
+
+	var req changePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "current_password and new_password (min 8 chars) are required")
+		return
+	}
+
+	// Fetch current hash
+	var currentHash string
+	err := h.db.QueryRowContext(c.Request.Context(),
+		`SELECT password FROM users WHERE id = $1`, userID,
+	).Scan(&currentHash)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			response.Unauthorized(c, "user not found")
+			return
+		}
+		h.logger.Error().Err(err).Str("user_id", userID).Msg("failed to query user for password change")
+		response.InternalError(c, "failed to change password")
+		return
+	}
+
+	// Verify current password
+	if err := bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(req.CurrentPassword)); err != nil {
+		response.BadRequest(c, "current password is incorrect")
+		return
+	}
+
+	// Hash new password
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		h.logger.Error().Err(err).Msg("failed to hash new password")
+		response.InternalError(c, "failed to change password")
+		return
+	}
+
+	// Update
+	_, err = h.db.ExecContext(c.Request.Context(),
+		`UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2`,
+		string(newHash), userID,
+	)
+	if err != nil {
+		h.logger.Error().Err(err).Str("user_id", userID).Msg("failed to update password")
+		response.InternalError(c, "failed to change password")
+		return
+	}
+
+	h.logger.Info().Str("user_id", userID).Msg("password changed successfully")
+	response.Success(c, "password updated", nil)
+}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Settings, User, Mail, Shield, Key, Loader2 } from "lucide-react";
-import { fetchApi } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { fetchApi, clearAuthToken } from "@/lib/api";
 
 interface UserProfile {
     id: string;
@@ -12,131 +13,270 @@ interface UserProfile {
 }
 
 export default function SettingsPage() {
+    const router = useRouter();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Change password
+    const [pwOpen, setPwOpen] = useState(false);
+    const [currentPw, setCurrentPw] = useState("");
+    const [newPw, setNewPw] = useState("");
+    const [confirmPw, setConfirmPw] = useState("");
+    const [pwLoading, setPwLoading] = useState(false);
+    const [pwError, setPwError] = useState<string | null>(null);
+    const [pwSuccess, setPwSuccess] = useState(false);
+
+    // Sign out
+    const [signingOut, setSigningOut] = useState(false);
+
     useEffect(() => {
-        const fetchProfile = async () => {
+        const load = async () => {
             try {
-                const res = await fetchApi("/auth/me") as { data: UserProfile };
+                const res = (await fetchApi("/auth/me")) as { data: UserProfile };
                 setProfile(res.data);
-            } catch (err) {
-                console.error("Failed to fetch user profile", err);
+            } catch {
+                /* redirect handled by fetchApi */
             } finally {
                 setLoading(false);
             }
         };
-        fetchProfile();
+        load();
     }, []);
-    
+
+    const handleChangePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setPwError(null);
+        setPwSuccess(false);
+
+        if (newPw !== confirmPw) {
+            setPwError("New passwords do not match.");
+            return;
+        }
+        if (newPw.length < 8) {
+            setPwError("Password must be at least 8 characters.");
+            return;
+        }
+
+        setPwLoading(true);
+        try {
+            await fetchApi("/auth/password", {
+                method: "PUT",
+                body: JSON.stringify({
+                    current_password: currentPw,
+                    new_password: newPw,
+                }),
+            });
+            setPwSuccess(true);
+            setCurrentPw("");
+            setNewPw("");
+            setConfirmPw("");
+            setTimeout(() => setPwOpen(false), 2000);
+        } catch (err: any) {
+            setPwError(err.message || "Failed to change password.");
+        } finally {
+            setPwLoading(false);
+        }
+    };
+
+    const handleSignOut = () => {
+        setSigningOut(true);
+        setTimeout(() => {
+            clearAuthToken();
+            router.push("/login");
+        }, 300);
+    };
+
     return (
-        <div className="max-w-4xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="max-w-2xl space-y-10">
             {/* Header */}
-            <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-10 w-10 bg-primary/10 rounded-xl border border-primary/20 shadow-inner">
-                    <Settings className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                        Account Settings
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                        Manage your profile and platform preferences.
-                    </p>
-                </div>
+            <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                    Account
+                </h1>
+                <p className="text-sm text-zinc-500 mt-0.5">
+                    Manage your profile and security preferences.
+                </p>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* Profile Card */}
-                <div className="rounded-xl border border-border bg-card/60 backdrop-blur-md overflow-hidden shadow-sm">
-                    <div className="border-b border-border bg-muted/20 px-6 py-4">
-                        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <User className="h-4 w-4" /> Profile Information
-                        </h2>
-                    </div>
-                    <div className="p-6 space-y-6">
-                        {loading ? (
-                            <div className="flex justify-center py-8">
-                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                                        Username
-                                    </label>
-                                    <div className="flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg border border-border/50">
-                                        <User className="h-4 w-4 text-muted-foreground" />
-                                        <span className="text-sm text-foreground">{profile?.username || "Unknown"}</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                                        Email Address
-                                    </label>
-                                    <div className="flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg border border-border/50">
-                                        <Mail className="h-4 w-4 text-muted-foreground" />
-                                        <span className="text-sm text-foreground">{profile?.email || "Unknown"}</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                                        Account Role
-                                    </label>
-                                    <div className="flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg border border-border/50">
-                                        <Shield className="h-4 w-4 text-primary" />
-                                        <span className="text-sm capitalize font-medium text-primary shadow-sm bg-primary/10 px-2 py-0.5 rounded-md">{profile?.role || "user"}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+            {/* ── Profile ────────────────────────────────────── */}
+            <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05, duration: 0.35 }}
+            >
+                <h2 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-3">
+                    Profile
+                </h2>
+                <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 overflow-hidden divide-y divide-zinc-800/40">
+                    {loading ? (
+                        <div className="px-5 py-8 text-center text-xs text-zinc-600">
+                            Loading…
+                        </div>
+                    ) : (
+                        <>
+                            <ProfileRow label="Username" value={profile?.username} />
+                            <ProfileRow label="Email" value={profile?.email} />
+                            <ProfileRow
+                                label="Role"
+                                value={
+                                    <span className="text-xs capitalize font-mono text-zinc-300">
+                                        {profile?.role || "user"}
+                                    </span>
+                                }
+                            />
+                            <ProfileRow
+                                label="User ID"
+                                value={
+                                    <span className="text-[10px] font-mono text-zinc-600 select-all">
+                                        {profile?.id}
+                                    </span>
+                                }
+                            />
+                        </>
+                    )}
                 </div>
+            </motion.section>
 
-                {/* Security Card */}
-                <div className="rounded-xl border border-border bg-card/60 backdrop-blur-md overflow-hidden shadow-sm">
-                    <div className="border-b border-border bg-muted/20 px-6 py-4">
-                        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <Shield className="h-4 w-4" /> Security Context
-                        </h2>
+            {/* ── Security ───────────────────────────────────── */}
+            <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.35 }}
+            >
+                <h2 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-3">
+                    Security
+                </h2>
+                <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 overflow-hidden divide-y divide-zinc-800/40">
+                    {/* Change Password */}
+                    <div className="px-5 py-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-sm text-zinc-300">Password</div>
+                                <div className="text-xs text-zinc-600 mt-0.5">
+                                    Update your account password.
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setPwOpen(!pwOpen);
+                                    setPwError(null);
+                                    setPwSuccess(false);
+                                }}
+                                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                            >
+                                {pwOpen ? "Cancel" : "Change →"}
+                            </button>
+                        </div>
+
+                        <AnimatePresence>
+                            {pwOpen && (
+                                <motion.form
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.25 }}
+                                    className="overflow-hidden"
+                                    onSubmit={handleChangePassword}
+                                >
+                                    <div className="pt-4 space-y-3">
+                                        <input
+                                            type="password"
+                                            placeholder="Current password"
+                                            value={currentPw}
+                                            onChange={(e) => setCurrentPw(e.target.value)}
+                                            required
+                                            className="w-full h-9 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder="New password"
+                                            value={newPw}
+                                            onChange={(e) => setNewPw(e.target.value)}
+                                            required
+                                            minLength={8}
+                                            className="w-full h-9 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder="Confirm new password"
+                                            value={confirmPw}
+                                            onChange={(e) => setConfirmPw(e.target.value)}
+                                            required
+                                            minLength={8}
+                                            className="w-full h-9 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+                                        />
+
+                                        {pwError && (
+                                            <div className="text-xs text-rose-400">{pwError}</div>
+                                        )}
+                                        {pwSuccess && (
+                                            <div className="text-xs text-emerald-400">
+                                                Password updated successfully.
+                                            </div>
+                                        )}
+
+                                        <button
+                                            type="submit"
+                                            disabled={pwLoading}
+                                            className="h-9 px-4 rounded-lg text-xs font-medium bg-white/[0.06] text-zinc-200 border border-zinc-700 hover:bg-white/[0.1] hover:border-zinc-500 disabled:opacity-40 transition-all"
+                                        >
+                                            {pwLoading ? "Updating…" : "Update Password"}
+                                        </button>
+                                    </div>
+                                </motion.form>
+                            )}
+                        </AnimatePresence>
                     </div>
-                    <div className="p-6 space-y-6">
-                        <div className="space-y-4">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <h3 className="text-sm font-medium text-foreground">Password</h3>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Update your password to keep your account secure.
-                                    </p>
-                                </div>
-                                <button className="text-xs font-medium bg-muted text-foreground px-3 py-1.5 rounded-md hover:bg-muted/80 transition-colors">
-                                    Update
-                                </button>
-                            </div>
-                            <div className="h-px bg-border/50" />
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <h3 className="text-sm font-medium text-foreground">API Keys</h3>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Manage API keys for CI/CD integration.
-                                    </p>
-                                </div>
-                                <button className="text-xs font-medium bg-primary/10 text-primary px-3 py-1.5 rounded-md hover:bg-primary/20 transition-colors">
-                                    Manage
-                                </button>
-                            </div>
-                            <div className="h-px bg-border/50" />
-                            <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 mt-6">
-                                <Key className="h-5 w-5 text-emerald-500" />
-                                <div>
-                                    <h4 className="text-sm font-medium text-emerald-500">JWT Strict Mode Active</h4>
-                                    <p className="text-xs text-emerald-500/80">Your session is secured via RSA256 signature HttpOnly cookies.</p>
-                                </div>
-                            </div>
+
+                    {/* Authentication method */}
+                    <div className="px-5 py-4 flex items-center justify-between">
+                        <div className="text-sm text-zinc-300">Authentication</div>
+                        <div className="text-xs font-mono text-zinc-600">
+                            RS256 · HttpOnly JWT
                         </div>
                     </div>
                 </div>
-            </div>
+            </motion.section>
+
+            {/* ── Sign Out ───────────────────────────────────── */}
+            <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.35 }}
+            >
+                <div className="rounded-xl border border-zinc-800/50 bg-zinc-950/30 px-5 py-4 flex items-center justify-between">
+                    <div>
+                        <div className="text-sm text-zinc-400">Sign out</div>
+                        <div className="text-xs text-zinc-600 mt-0.5">
+                            End your current session.
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleSignOut}
+                        disabled={signingOut}
+                        className="h-8 px-4 rounded-lg text-xs font-medium text-rose-400 border border-rose-500/20 bg-rose-500/[0.04] hover:bg-rose-500/[0.08] hover:border-rose-500/30 disabled:opacity-40 transition-all"
+                    >
+                        {signingOut ? "Signing out…" : "Sign out"}
+                    </button>
+                </div>
+            </motion.section>
+        </div>
+    );
+}
+
+/* ── Helper ────────────────────────────────────────────────── */
+
+function ProfileRow({
+    label,
+    value,
+}: {
+    label: string;
+    value?: React.ReactNode;
+}) {
+    return (
+        <div className="px-5 py-3.5 flex items-center justify-between">
+            <div className="text-xs text-zinc-500">{label}</div>
+            <div className="text-sm text-zinc-300">{value || "—"}</div>
         </div>
     );
 }

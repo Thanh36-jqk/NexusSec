@@ -1,60 +1,111 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import {
-    Activity, CheckCircle2, ShieldAlert, Timer, XCircle,
-    ChevronRight, BarChart3, Target, ExternalLink, Loader2
-} from "lucide-react";
+import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import {
+    PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+} from "recharts";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import { ScanJob, ReportSummary, APIResponse, Report } from "@/types";
+
+/* ── Constants ─────────────────────────────────────────────── */
 
 const SEVERITY_COLORS: Record<string, string> = {
     Critical: "#ef4444",
     High: "#f97316",
-    Medium: "#f59e0b",
+    Medium: "#eab308",
     Low: "#3b82f6",
-    Info: "#6b7280",
+    Info: "#52525b",
 };
 
+const STATUS_DOT: Record<string, string> = {
+    completed: "bg-emerald-400",
+    failed: "bg-rose-400",
+    running: "bg-blue-400 animate-pulse",
+    pending: "bg-zinc-500 animate-pulse",
+};
+
+/* ── Page Component ────────────────────────────────────────── */
+
 export default function DashboardPage() {
+    const router = useRouter();
     const [scans, setScans] = useState<ScanJob[]>([]);
     const [loading, setLoading] = useState(true);
-    // selectedScan drives the left panel. null = show auto-latest
+
     const [selectedScan, setSelectedScan] = useState<ScanJob | null>(null);
     const [selectedReport, setSelectedReport] = useState<ReportSummary | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
 
-    // ── Initial load ──────────────────────────────────────────
-    useEffect(() => {
-        const loadDashboard = async () => {
-            try {
-                const res = await fetchApi("/scans") as APIResponse<ScanJob[]>;
-                const scanData = res.data || [];
-                setScans(scanData);
+    // Trend data — severity distribution across last N completed scans
+    const [trendData, setTrendData] = useState<Array<Record<string, unknown>>>([]);
 
-                // Auto-select the latest completed scan
-                const latest = scanData.find(s => s.status.toLowerCase() === "completed");
-                if (latest) {
-                    setSelectedScan(latest);
+    // Quick-launch
+    const [quickUrl, setQuickUrl] = useState("");
+    const [quickType, setQuickType] = useState<"zap" | "nmap" | "full">("zap");
+    const [quickLoading, setQuickLoading] = useState(false);
+
+    /* ── Data loading ──────────────────────────────────────── */
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const res = (await fetchApi("/scans")) as APIResponse<ScanJob[]>;
+                const data = res.data || [];
+                setScans(data);
+
+                const completed = data.filter(
+                    (s) => s.status.toLowerCase() === "completed"
+                );
+                if (completed.length > 0) {
+                    setSelectedScan(completed[0]);
                 }
+
+                // Fetch reports for last 7 completed scans → build trend
+                const last7 = completed.slice(0, 7).reverse();
+                const trend: Array<Record<string, unknown>> = [];
+                for (const scan of last7) {
+                    try {
+                        const r = (await fetchApi(
+                            `/scans/${scan.id}/report`
+                        )) as APIResponse<Report>;
+                        if (r.data?.summary) {
+                            const s = r.data.summary;
+                            trend.push({
+                                name: scan.scan_type.toUpperCase(),
+                                Critical: s.critical,
+                                High: s.high,
+                                Medium: s.medium,
+                                Low: s.low,
+                                Info: s.info,
+                            });
+                        }
+                    } catch {
+                        /* skip */
+                    }
+                }
+                setTrendData(trend);
             } catch (err) {
-                console.error("Failed to load dashboard data", err);
+                console.error("Dashboard load failed", err);
             } finally {
                 setLoading(false);
             }
         };
-        loadDashboard();
+        load();
     }, []);
 
-    // ── Fetch report whenever selectedScan changes ─────────────
-    const fetchReportForScan = useCallback(async (scan: ScanJob) => {
+    /* ── Report for selected scan ──────────────────────────── */
+
+    const fetchReport = useCallback(async (scan: ScanJob) => {
         setReportLoading(true);
         setSelectedReport(null);
         try {
-            const reportRes = await fetchApi(`/scans/${scan.id}/report`) as APIResponse<Report>;
-            setSelectedReport(reportRes.data?.summary ?? null);
+            const r = (await fetchApi(
+                `/scans/${scan.id}/report`
+            )) as APIResponse<Report>;
+            setSelectedReport(r.data?.summary ?? null);
         } catch {
             setSelectedReport(null);
         } finally {
@@ -63,212 +114,424 @@ export default function DashboardPage() {
     }, []);
 
     useEffect(() => {
-        if (selectedScan && selectedScan.status.toLowerCase() === "completed") {
-            fetchReportForScan(selectedScan);
+        if (selectedScan?.status.toLowerCase() === "completed") {
+            fetchReport(selectedScan);
         } else {
             setSelectedReport(null);
         }
-    }, [selectedScan, fetchReportForScan]);
+    }, [selectedScan, fetchReport]);
 
-    // ── Derived stats ─────────────────────────────────────────
-    const stats = {
-        total: scans.length,
-        completed: scans.filter(s => s.status.toLowerCase() === "completed").length,
-        active: scans.filter(s => ["running", "pending"].includes(s.status.toLowerCase())).length,
-        failed: scans.filter(s => s.status.toLowerCase() === "failed").length,
+    /* ── Quick launch ──────────────────────────────────────── */
+
+    const handleQuickLaunch = async () => {
+        if (!quickUrl.trim()) return;
+        setQuickLoading(true);
+        try {
+            // Create target first
+            const tRes = (await fetchApi("/targets", {
+                method: "POST",
+                body: JSON.stringify({
+                    name: new URL(quickUrl).hostname,
+                    base_url: quickUrl,
+                    description: "Quick launch from dashboard",
+                }),
+            })) as { data: { id: string } };
+
+            // Start scan
+            const sRes = (await fetchApi("/scans", {
+                method: "POST",
+                body: JSON.stringify({
+                    target_id: tRes.data.id,
+                    scan_type: quickType,
+                }),
+            })) as { data: { id: string } };
+
+            router.push(`/scans/${sRes.data.id}`);
+        } catch (err: any) {
+            console.error("Quick launch failed:", err.message);
+        } finally {
+            setQuickLoading(false);
+        }
     };
 
-    // ── Chart data ────────────────────────────────────────────
-    const rawChartData = selectedReport ? [
-        { name: "Critical", value: selectedReport.critical, color: SEVERITY_COLORS.Critical },
-        { name: "High",     value: selectedReport.high,     color: SEVERITY_COLORS.High },
-        { name: "Medium",   value: selectedReport.medium,   color: SEVERITY_COLORS.Medium },
-        { name: "Low",      value: selectedReport.low,      color: SEVERITY_COLORS.Low },
-        { name: "Info",     value: selectedReport.info,     color: SEVERITY_COLORS.Info },
-    ] : [];
-    const chartData = rawChartData.filter(d => d.value > 0);
+    /* ── Derived stats ─────────────────────────────────────── */
+
+    const stats = {
+        total: scans.length,
+        completed: scans.filter((s) => s.status.toLowerCase() === "completed").length,
+        active: scans.filter((s) =>
+            ["running", "pending"].includes(s.status.toLowerCase())
+        ).length,
+        failed: scans.filter((s) => s.status.toLowerCase() === "failed").length,
+    };
+
+    /* ── Chart data ────────────────────────────────────────── */
+
+    const chartData = selectedReport
+        ? [
+              { name: "Critical", value: selectedReport.critical, color: SEVERITY_COLORS.Critical },
+              { name: "High", value: selectedReport.high, color: SEVERITY_COLORS.High },
+              { name: "Medium", value: selectedReport.medium, color: SEVERITY_COLORS.Medium },
+              { name: "Low", value: selectedReport.low, color: SEVERITY_COLORS.Low },
+              { name: "Info", value: selectedReport.info, color: SEVERITY_COLORS.Info },
+          ].filter((d) => d.value > 0)
+        : [];
+
+    const totalFindings = selectedReport?.total ?? 0;
+
+    /* ── Render ─────────────────────────────────────────────── */
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl">
-            {/* Header */}
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">Command Center</h1>
-                <p className="text-muted-foreground mt-1 text-sm">
-                    Click any scan in the list to drill into its vulnerability breakdown.
-                </p>
-            </div>
-
-            {/* Quick Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <MetricCard icon={<Target className="h-5 w-5 text-primary" />}        label="Total Scans" value={loading ? "-" : stats.total} />
-                <MetricCard icon={<CheckCircle2 className="h-5 w-5 text-emerald-500" />} label="Completed"   value={loading ? "-" : stats.completed} />
-                <MetricCard icon={<Timer className="h-5 w-5 text-amber-500 animate-pulse" />} label="Active"  value={loading ? "-" : stats.active} />
-                <MetricCard icon={<XCircle className="h-5 w-5 text-rose-500" />}      label="Failed"      value={loading ? "-" : stats.failed} />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* ── Left: Selected Scan Chart ─────────────────── */}
-                <div className="lg:col-span-2 rounded-xl border border-border bg-card/60 backdrop-blur-md overflow-hidden shadow-sm flex flex-col">
-                    <div className="border-b border-border bg-muted/20 px-6 py-4 flex items-center justify-between flex-wrap gap-2">
-                        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <BarChart3 className="h-4 w-4" />
-                            {selectedScan ? (
-                                <span className="truncate max-w-[260px]">
-                                    {selectedScan.scan_type.toUpperCase()} — {selectedScan.target_url}
-                                </span>
-                            ) : "Scan Breakdown"}
-                        </h2>
-                        <div className="flex items-center gap-3">
-                            {selectedReport && (
-                                <span className="text-xs font-medium px-2 py-1 bg-primary/10 text-primary rounded-md">
-                                    {selectedReport.total} Findings
-                                </span>
-                            )}
-                            {selectedScan && (
-                                <Link
-                                    href={`/scans/${selectedScan.id}`}
-                                    className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
-                                >
-                                    Full Report <ExternalLink className="h-3 w-3" />
-                                </Link>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="p-6 flex-1 flex flex-col justify-center items-center min-h-[300px]">
-                        {loading ? (
-                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                        ) : !selectedScan ? (
-                            <div className="text-center py-12">
-                                <ShieldAlert className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
-                                <p className="text-sm text-muted-foreground">No completed scans yet.</p>
-                            </div>
-                        ) : reportLoading ? (
-                            <div className="flex flex-col items-center gap-3">
-                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                                <p className="text-xs text-muted-foreground">Loading report…</p>
-                            </div>
-                        ) : selectedScan.status.toLowerCase() !== "completed" ? (
-                            <div className="text-center py-12">
-                                <Timer className="h-12 w-12 text-amber-500/60 mx-auto mb-3 animate-pulse" />
-                                <p className="text-sm text-muted-foreground">
-                                    This scan is <span className="font-semibold capitalize">{selectedScan.status}</span> — report will appear when it completes.
-                                </p>
-                            </div>
-                        ) : chartData.length === 0 ? (
-                            <div className="text-center py-12">
-                                <CheckCircle2 className="h-16 w-16 text-emerald-500/80 mx-auto mb-4" />
-                                <h3 className="text-lg font-bold text-foreground">Clean Scan!</h3>
-                                <p className="text-sm text-muted-foreground mt-1">No vulnerabilities detected in this scan.</p>
-                            </div>
-                        ) : (
-                            <div className="h-[280px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={chartData}
-                                            innerRadius={70}
-                                            outerRadius={100}
-                                            paddingAngle={3}
-                                            dataKey="value"
-                                            stroke="none"
-                                        >
-                                            {chartData.map((entry, i) => (
-                                                <Cell key={i} fill={entry.color} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip
-                                            contentStyle={{ backgroundColor: "var(--card)", borderColor: "var(--border)", borderRadius: "8px" }}
-                                            itemStyle={{ color: "var(--foreground)" }}
-                                        />
-                                        <Legend verticalAlign="bottom" height={36} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        )}
-                    </div>
+        <div className="space-y-8 max-w-[1200px]">
+            {/* ── Header Row ─────────────────────────────────── */}
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                        Overview
+                    </h1>
+                    <p className="text-sm text-zinc-500 mt-0.5">
+                        Security posture at a glance.
+                    </p>
                 </div>
 
-                {/* ── Right: Clickable Execution List ──────────── */}
-                <div className="rounded-xl border border-border bg-card/60 backdrop-blur-md overflow-hidden shadow-sm flex flex-col">
-                    <div className="border-b border-border bg-muted/20 px-6 py-4">
-                        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <Activity className="h-4 w-4" /> Recent Executions
-                        </h2>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Click to view breakdown</p>
-                    </div>
+                {/* Quick Launch */}
+                <div className="flex items-center gap-2">
+                    <input
+                        type="url"
+                        placeholder="https://target.com"
+                        value={quickUrl}
+                        onChange={(e) => setQuickUrl(e.target.value)}
+                        className="h-9 w-56 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+                    />
+                    <select
+                        value={quickType}
+                        onChange={(e) => setQuickType(e.target.value as typeof quickType)}
+                        className="h-9 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600 appearance-none cursor-pointer"
+                    >
+                        <option value="zap">ZAP</option>
+                        <option value="nmap">Nmap</option>
+                        <option value="full">Full</option>
+                    </select>
+                    <button
+                        onClick={handleQuickLaunch}
+                        disabled={quickLoading || !quickUrl.trim()}
+                        className="h-9 px-4 rounded-lg text-xs font-medium bg-white/[0.06] text-zinc-200 border border-zinc-700 hover:bg-white/[0.1] hover:border-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                        {quickLoading ? "..." : "Scan"}
+                    </button>
+                </div>
+            </div>
 
-                    <div className="flex-1 divide-y divide-border/50 overflow-y-auto max-h-[380px]">
-                        {loading ? (
-                            Array.from({ length: 5 }).map((_, i) => (
-                                <div key={i} className="p-4 flex gap-3 animate-pulse">
-                                    <div className="w-2 h-2 mt-1.5 rounded-full bg-muted" />
-                                    <div className="flex-1 space-y-2">
-                                        <div className="h-3 bg-muted rounded w-3/4" />
-                                        <div className="h-3 bg-muted rounded w-1/2" />
+            {/* ── Metrics Row ────────────────────────────────── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-zinc-800/50 rounded-xl overflow-hidden border border-zinc-800/80">
+                {[
+                    { label: "scans", value: stats.total },
+                    { label: "clear", value: stats.completed },
+                    { label: "active", value: stats.active },
+                    { label: "failed", value: stats.failed },
+                ].map((m, i) => (
+                    <motion.div
+                        key={m.label}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.06, duration: 0.35 }}
+                        className="bg-zinc-950 px-5 py-4"
+                    >
+                        <div className="text-3xl font-light font-mono text-foreground tracking-tight">
+                            {loading ? "—" : m.value}
+                        </div>
+                        <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mt-1">
+                            {m.label}
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+
+            {/* ── Charts Row ─────────────────────────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left: Severity Breakdown (doughnut) */}
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                    className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 overflow-hidden"
+                >
+                    <div className="px-5 py-3 border-b border-zinc-800/60 flex items-center justify-between">
+                        <h2 className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                            Severity Breakdown
+                        </h2>
+                        {selectedScan && (
+                            <Link
+                                href={`/scans/${selectedScan.id}`}
+                                className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                            >
+                                Open →
+                            </Link>
+                        )}
+                    </div>
+                    <div className="p-5 min-h-[280px] flex items-center justify-center">
+                        <AnimatePresence mode="wait">
+                            {loading || reportLoading ? (
+                                <motion.div
+                                    key="loader"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="text-xs text-zinc-600"
+                                >
+                                    Loading…
+                                </motion.div>
+                            ) : !selectedScan || chartData.length === 0 ? (
+                                <motion.div
+                                    key="empty"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="text-center"
+                                >
+                                    <div className="text-4xl font-light font-mono text-emerald-400">0</div>
+                                    <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mt-2">
+                                        vulnerabilities
                                     </div>
-                                </div>
-                            ))
-                        ) : scans.length === 0 ? (
-                            <div className="p-8 text-center text-sm text-muted-foreground">No scans found.</div>
-                        ) : (
-                            scans.slice(0, 10).map(scan => {
-                                const isSelected = selectedScan?.id === scan.id;
-                                const statusLower = scan.status.toLowerCase();
-                                return (
-                                    <button
-                                        key={scan.id}
-                                        onClick={() => setSelectedScan(scan)}
-                                        className={`w-full text-left p-4 flex items-center gap-3 transition-colors group ${
-                                            isSelected
-                                                ? "bg-primary/10 border-l-2 border-primary"
-                                                : "hover:bg-muted/30 border-l-2 border-transparent"
-                                        }`}
-                                    >
-                                        <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                            statusLower === "completed" ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" :
-                                            statusLower === "failed"    ? "bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.6)]" :
-                                            "bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)] animate-pulse"
-                                        }`} />
-                                        <div className="flex-1 overflow-hidden">
-                                            <div className="text-xs font-semibold text-foreground truncate">
-                                                {scan.scan_type.toUpperCase()} ENGINE
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    key={selectedScan.id}
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="flex items-center gap-6 w-full"
+                                >
+                                    <div className="h-[220px] w-[220px] shrink-0">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={chartData}
+                                                    innerRadius={60}
+                                                    outerRadius={85}
+                                                    paddingAngle={2}
+                                                    dataKey="value"
+                                                    stroke="none"
+                                                >
+                                                    {chartData.map((entry, i) => (
+                                                        <Cell key={i} fill={entry.color} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        background: "#18181b",
+                                                        border: "1px solid #27272a",
+                                                        borderRadius: "8px",
+                                                        fontSize: "12px",
+                                                    }}
+                                                    itemStyle={{ color: "#fafafa" }}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="flex-1 space-y-3">
+                                        <div>
+                                            <div className="text-3xl font-light font-mono text-foreground">
+                                                {totalFindings}
                                             </div>
-                                            <div className="text-[10px] text-muted-foreground truncate">
-                                                {scan.target_url}
-                                            </div>
-                                            <div className="text-[10px] text-muted-foreground/60 mt-0.5 capitalize">
-                                                {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(scan.created_at))} · {scan.status}
+                                            <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mt-0.5">
+                                                total findings
                                             </div>
                                         </div>
-                                        <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-colors ${isSelected ? "text-primary" : "text-muted-foreground/40 group-hover:text-primary"}`} />
-                                    </button>
-                                );
-                            })
+                                        <div className="h-px bg-zinc-800/60" />
+                                        <div className="space-y-1.5">
+                                            {chartData.map((d) => (
+                                                <div key={d.name} className="flex items-center justify-between text-xs">
+                                                    <div className="flex items-center gap-2">
+                                                        <div
+                                                            className="w-2 h-2 rounded-full"
+                                                            style={{ background: d.color }}
+                                                        />
+                                                        <span className="text-zinc-400">{d.name}</span>
+                                                    </div>
+                                                    <span className="font-mono text-zinc-300">{d.value}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </motion.div>
+
+                {/* Right: Severity Trend (stacked bar) */}
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25, duration: 0.4 }}
+                    className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 overflow-hidden"
+                >
+                    <div className="px-5 py-3 border-b border-zinc-800/60">
+                        <h2 className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                            Scan Trend
+                        </h2>
+                    </div>
+                    <div className="p-5 min-h-[280px] flex items-center justify-center">
+                        {loading ? (
+                            <div className="text-xs text-zinc-600">Loading…</div>
+                        ) : trendData.length === 0 ? (
+                            <div className="text-center">
+                                <div className="text-xs text-zinc-600">
+                                    Not enough data yet — complete more scans.
+                                </div>
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={240}>
+                                <BarChart data={trendData} barCategoryGap="20%">
+                                    <CartesianGrid
+                                        vertical={false}
+                                        stroke="#27272a"
+                                        strokeDasharray="3 3"
+                                    />
+                                    <XAxis
+                                        dataKey="name"
+                                        tick={{ fontSize: 10, fill: "#52525b" }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                    />
+                                    <YAxis
+                                        tick={{ fontSize: 10, fill: "#52525b" }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        width={28}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            background: "#18181b",
+                                            border: "1px solid #27272a",
+                                            borderRadius: "8px",
+                                            fontSize: "11px",
+                                        }}
+                                        itemStyle={{ color: "#a1a1aa" }}
+                                    />
+                                    <Bar dataKey="Critical" stackId="a" fill={SEVERITY_COLORS.Critical} radius={[0, 0, 0, 0]} />
+                                    <Bar dataKey="High" stackId="a" fill={SEVERITY_COLORS.High} />
+                                    <Bar dataKey="Medium" stackId="a" fill={SEVERITY_COLORS.Medium} />
+                                    <Bar dataKey="Low" stackId="a" fill={SEVERITY_COLORS.Low} />
+                                    <Bar dataKey="Info" stackId="a" fill={SEVERITY_COLORS.Info} radius={[3, 3, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
                         )}
                     </div>
+                </motion.div>
+            </div>
 
-                    {scans.length > 0 && (
-                        <div className="border-t border-border px-4 py-3">
-                            <Link href="/scans" className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
-                                View all scans <ChevronRight className="h-3 w-3" />
-                            </Link>
-                        </div>
-                    )}
+            {/* ── Recent Activity Table ───────────────────────── */}
+            <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35, duration: 0.4 }}
+                className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 overflow-hidden"
+            >
+                <div className="px-5 py-3 border-b border-zinc-800/60 flex items-center justify-between">
+                    <h2 className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                        Recent Activity
+                    </h2>
+                    <Link
+                        href="/scans"
+                        className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                    >
+                        View all →
+                    </Link>
                 </div>
-            </div>
-        </div>
-    );
-}
 
-function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
-    return (
-        <div className="rounded-xl border border-border bg-card/60 backdrop-blur-md p-5 flex items-center gap-4 shadow-sm hover:border-primary/30 transition-colors">
-            <div className="p-3 bg-muted/30 rounded-lg shrink-0">{icon}</div>
-            <div>
-                <div className="text-2xl font-bold text-foreground leading-none mb-1">{value}</div>
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</div>
-            </div>
+                {loading ? (
+                    <div className="p-8 text-center text-xs text-zinc-600">Loading…</div>
+                ) : scans.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-zinc-600">
+                        No scans yet — use the form above to launch your first scan.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-zinc-800/40">
+                                    <th className="text-left px-5 py-2.5 text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-medium">
+                                        Engine
+                                    </th>
+                                    <th className="text-left px-5 py-2.5 text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-medium">
+                                        Target
+                                    </th>
+                                    <th className="text-left px-5 py-2.5 text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-medium">
+                                        Status
+                                    </th>
+                                    <th className="text-left px-5 py-2.5 text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-medium">
+                                        Date
+                                    </th>
+                                    <th className="w-8" />
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {scans.slice(0, 8).map((scan, i) => {
+                                    const sl = scan.status.toLowerCase();
+                                    const isSelected = selectedScan?.id === scan.id;
+                                    return (
+                                        <motion.tr
+                                            key={scan.id}
+                                            initial={{ opacity: 0, x: -8 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: 0.35 + i * 0.04, duration: 0.3 }}
+                                            onClick={() => setSelectedScan(scan)}
+                                            className={`border-b border-zinc-800/30 cursor-pointer transition-colors ${
+                                                isSelected
+                                                    ? "bg-white/[0.03]"
+                                                    : "hover:bg-white/[0.02]"
+                                            }`}
+                                        >
+                                            <td className="px-5 py-3">
+                                                <span className="text-xs font-mono text-zinc-300 uppercase">
+                                                    {scan.scan_type}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                <span className="text-xs text-zinc-400 truncate block max-w-[280px]">
+                                                    {scan.target_url}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div
+                                                        className={`w-1.5 h-1.5 rounded-full ${
+                                                            STATUS_DOT[sl] || "bg-zinc-600"
+                                                        }`}
+                                                    />
+                                                    <span className="text-xs text-zinc-500 capitalize">
+                                                        {scan.status}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                <span className="text-xs text-zinc-600 font-mono">
+                                                    {new Intl.DateTimeFormat("en-US", {
+                                                        month: "short",
+                                                        day: "numeric",
+                                                    }).format(new Date(scan.created_at))}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                <Link
+                                                    href={`/scans/${scan.id}`}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="text-zinc-700 hover:text-zinc-400 transition-colors"
+                                                >
+                                                    →
+                                                </Link>
+                                            </td>
+                                        </motion.tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </motion.div>
         </div>
     );
 }

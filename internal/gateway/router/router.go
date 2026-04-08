@@ -107,6 +107,7 @@ func Setup(deps *Dependencies) *gin.Engine {
 			authProtected := protected.Group("/auth")
 			{
 				authProtected.GET("/me", deps.AuthHandler.Me)
+				authProtected.PUT("/password", deps.AuthHandler.ChangePassword)
 			}
 
 			// Target routes — manage scan targets

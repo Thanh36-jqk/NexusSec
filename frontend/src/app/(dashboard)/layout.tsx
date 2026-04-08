@@ -1,85 +1,100 @@
-import Link from "next/link";
-import {
-    Shield,
-    LayoutDashboard,
-    ScanSearch,
-    FileText,
-    GitCompareArrows,
-    Settings,
-    Activity,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+"use client";
 
-const NAV_ITEMS = [
-    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { label: "Scans", href: "/scans", icon: ScanSearch },
-    { label: "Reports", href: "/reports", icon: FileText },
-    { label: "Diff", href: "/diff", icon: GitCompareArrows },
-    { label: "Settings", href: "/settings", icon: Settings },
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { fetchApi } from "@/lib/api";
+
+/* ── Nav items ─────────────────────────────────────────────── */
+
+const NAV = [
+    { label: "Overview", href: "/dashboard" },
+    { label: "Scans", href: "/scans" },
+    { label: "Reports", href: "/reports" },
+    { label: "Diff", href: "/diff" },
+    { label: "Settings", href: "/settings" },
 ];
 
-/**
- * Dashboard shell — sidebar + header + main content area.
- *
- * UX Decisions:
- * - Fixed sidebar: persistent navigation, doesn't push content
- * - Minimal sidebar: icon + label, no heavy decorations
- * - Connection indicator in sidebar footer: always visible WS status
- * - Content area has max-width for readability on ultrawide monitors
- */
+/* ── Layout ────────────────────────────────────────────────── */
+
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    const pathname = usePathname();
+    const [user, setUser] = useState<{ username: string; email: string } | null>(null);
+
+    useEffect(() => {
+        fetchApi("/auth/me")
+            .then((res: any) => setUser(res.data))
+            .catch(() => {});
+    }, []);
+
+    const initials = user?.username
+        ? user.username.slice(0, 2).toUpperCase()
+        : "—";
+
     return (
-        <div className="flex h-screen overflow-hidden bg-background">
-            {/* ── Sidebar ──────────────────────────────────────── */}
-            <aside className="hidden md:flex flex-col w-64 border-r border-border bg-sidebar shrink-0">
-                {/* Logo */}
-                <div className="flex items-center gap-2.5 px-6 py-5 border-b border-border">
-                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-primary/10">
-                        <Shield className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                        <h1 className="text-sm font-bold text-foreground tracking-tight">NexusSec</h1>
-                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                            Security Scanner
-                        </p>
-                    </div>
+        <div className="flex h-screen overflow-hidden bg-[#09090b]">
+            {/* ── Sidebar ─────────────────────────────────────── */}
+            <aside className="hidden md:flex flex-col w-56 border-r border-zinc-800/60 bg-[#0a0a0f] shrink-0">
+                {/* Brand */}
+                <div className="px-5 py-5 border-b border-zinc-800/40">
+                    <Link href="/dashboard" className="block">
+                        <span className="text-sm font-semibold tracking-tight text-foreground">
+                            NexusSec
+                        </span>
+                    </Link>
                 </div>
 
-                {/* Navigation */}
-                <nav className="flex-1 px-3 py-4 space-y-1">
-                    {NAV_ITEMS.map((item) => {
-                        const Icon = item.icon;
+                {/* Nav */}
+                <nav className="flex-1 px-3 py-4 space-y-0.5">
+                    {NAV.map((item) => {
+                        const isActive =
+                            pathname === item.href ||
+                            (item.href !== "/dashboard" &&
+                                pathname.startsWith(item.href));
+
                         return (
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                className={cn(
-                                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",
-                                    "text-sidebar-foreground hover:text-foreground hover:bg-sidebar-accent",
-                                    "transition-colors"
-                                )}
+                                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-colors relative ${
+                                    isActive
+                                        ? "text-foreground bg-white/[0.04]"
+                                        : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
+                                }`}
                             >
-                                <Icon className="h-4 w-4" />
+                                {isActive && (
+                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-blue-500 rounded-r" />
+                                )}
                                 {item.label}
                             </Link>
                         );
                     })}
                 </nav>
 
-                {/* Footer: Status */}
-                <div className="px-4 py-3 border-t border-border">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Activity className="h-3 w-3 text-emerald-500" />
-                        <span>System Operational</span>
+                {/* User footer */}
+                <Link
+                    href="/settings"
+                    className="px-4 py-3 border-t border-zinc-800/40 flex items-center gap-3 hover:bg-white/[0.02] transition-colors group"
+                >
+                    <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-[10px] font-semibold text-zinc-400 group-hover:border-zinc-600 transition-colors">
+                        {initials}
                     </div>
-                </div>
+                    <div className="flex-1 min-w-0">
+                        <div className="text-xs text-zinc-400 truncate">
+                            {user?.username || "Loading…"}
+                        </div>
+                        <div className="text-[10px] text-zinc-600 truncate">
+                            {user?.email || ""}
+                        </div>
+                    </div>
+                </Link>
             </aside>
 
-            {/* ── Main Content ─────────────────────────────────── */}
+            {/* ── Main Content ────────────────────────────────── */}
             <main className="flex-1 overflow-y-auto">
                 <div className="mx-auto max-w-7xl px-6 py-8">
                     {children}
