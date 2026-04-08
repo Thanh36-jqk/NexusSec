@@ -260,3 +260,40 @@ func (h *AuthHandler) generateToken(user userRow) (string, error) {
 
 	return token.SignedString(h.privateKey)
 }
+
+// ── Me ───────────────────────────────────────────────────────
+
+// Me returns the profile information of the currently authenticated user.
+//
+//	GET /api/v1/auth/me
+//	Response: 200 OK with user info
+func (h *AuthHandler) Me(c *gin.Context) {
+	userID := c.GetString(middleware.ContextKeyUserID)
+	if userID == "" {
+		response.Unauthorized(c, "unauthorized")
+		return
+	}
+
+	var user userRow
+	err := h.db.QueryRowContext(c.Request.Context(),
+		`SELECT id, email, username, role FROM users WHERE id = $1`,
+		userID,
+	).Scan(&user.ID, &user.Email, &user.Username, &user.Role)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			response.Unauthorized(c, "user not found")
+			return
+		}
+		h.logger.Error().Err(err).Str("user_id", userID).Msg("failed to query user for /me")
+		response.InternalError(c, "failed to get profile")
+		return
+	}
+
+	response.Success(c, "profile retrieved", userResponse{
+		ID:       user.ID,
+		Email:    user.Email,
+		Username: user.Username,
+		Role:     user.Role,
+	})
+}

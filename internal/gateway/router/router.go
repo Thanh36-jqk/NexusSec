@@ -103,6 +103,12 @@ func Setup(deps *Dependencies) *gin.Engine {
 		protected := v1.Group("")
 		protected.Use(jwtMw.Handler())
 		{
+			// Auth routes that require token
+			authProtected := protected.Group("/auth")
+			{
+				authProtected.GET("/me", deps.AuthHandler.Me)
+			}
+
 			// Target routes — manage scan targets
 			targets := protected.Group("/targets")
 			{
