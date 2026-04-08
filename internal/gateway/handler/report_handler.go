@@ -61,7 +61,10 @@ type CleanVulnerability struct {
 	Severity    string  `json:"severity"`
 	CVSSScore   float64 `json:"cvss_score,omitempty"`
 	URL         string  `json:"url,omitempty"`
+	Description string  `json:"description,omitempty"`
 	Remediation string  `json:"remediation,omitempty"`
+	CWE         string  `json:"cwe,omitempty"`
+	Reference   string  `json:"reference,omitempty"`
 	Port        int     `json:"port,omitempty"`
 	Protocol    string  `json:"protocol,omitempty"`
 	Service     string  `json:"service,omitempty"`
@@ -199,11 +202,14 @@ func (h *ReportHandler) GetReport(c *gin.Context) {
 			Severity:    v.Severity,
 			CVSSScore:   v.CVSSScore,
 			URL:         v.URL,
+			Description: v.Description,
 			Remediation: v.Remediation,
-			Port:       v.Port,
-			Protocol:   v.Protocol,
-			Service:    v.Service,
-			SourceTool: v.SourceTool,
+			CWE:         v.CWE,
+			Reference:   v.Reference,
+			Port:        v.Port,
+			Protocol:    v.Protocol,
+			Service:     v.Service,
+			SourceTool:  v.SourceTool,
 		})
 	}
 
