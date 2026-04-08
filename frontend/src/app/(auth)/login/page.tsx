@@ -33,7 +33,7 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="space-y-7 animate-in fade-in slide-in-from-bottom-3 duration-500">
+        <div className="space-y-7">
             {/* Header */}
             <div className="space-y-1">
                 <div className="flex items-center gap-2 mb-4">
