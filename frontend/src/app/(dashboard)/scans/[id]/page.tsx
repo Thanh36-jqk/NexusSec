@@ -164,7 +164,9 @@ export default function ScanDetailPage() {
             setScan(json.data);
 
             // If already completed, fetch report immediately
-            if (json.data.status === "completed" && json.data.report_id) {
+            // Note: do NOT gate on report_id — it may not be propagated back
+            // to PostgreSQL even when the MongoDB report exists.
+            if (json.data.status === "completed") {
                 await fetchReport();
             }
         } catch (err: any) {
