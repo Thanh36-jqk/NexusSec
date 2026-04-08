@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Image from "next/image";
 
 // Load canvas client-side only (needs window/document)
 const ShieldCanvas = dynamic(() => import("@/components/auth/ShieldCanvas"), {
@@ -37,20 +38,25 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
                 {/* Branding overlay */}
                 <div className="absolute bottom-0 left-0 right-0 p-10 z-10">
-                    <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-400/60 mb-3">
-                        Enterprise Security Platform
-                    </p>
-                    <h1
-                        className="text-[3.5rem] font-black tracking-tight leading-none"
-                        style={{
-                            background: "linear-gradient(135deg, #e2e8f0 0%, #7dd3fc 45%, #a5b4fc 100%)",
-                            WebkitBackgroundClip: "text",
-                            WebkitTextFillColor: "transparent",
-                            backgroundClip: "text",
-                        }}
-                    >
-                        NexusSec
-                    </h1>
+                    <div className="flex items-end gap-4 mb-2">
+                        <Image src="/logo.png" alt="NexusSec Logo" width={64} height={64} className="h-16 w-auto" />
+                        <div>
+                            <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-400/60 mb-2">
+                                Enterprise Security Platform
+                            </p>
+                            <h1
+                                className="text-[3.5rem] font-black tracking-tight leading-none"
+                                style={{
+                                    background: "linear-gradient(135deg, #e2e8f0 0%, #7dd3fc 45%, #a5b4fc 100%)",
+                                    WebkitBackgroundClip: "text",
+                                    WebkitTextFillColor: "transparent",
+                                    backgroundClip: "text",
+                                }}
+                            >
+                                NexusSec
+                            </h1>
+                        </div>
+                    </div>
                     <p className="mt-3 text-sm text-slate-400 max-w-xs leading-relaxed">
                         Automated API penetration testing powered by real-time orchestration. Discover, analyze, and mitigate vulnerabilities at scale.
                     </p>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { fetchApi } from "@/lib/api";
 
 /* ── Nav items ─────────────────────────────────────────────── */
@@ -41,7 +42,8 @@ export default function DashboardLayout({
             <aside className="hidden md:flex flex-col w-56 border-r border-zinc-800/60 bg-[#0a0a0f] shrink-0">
                 {/* Brand */}
                 <div className="px-5 py-5 border-b border-zinc-800/40">
-                    <Link href="/dashboard" className="block">
+                    <Link href="/dashboard" className="flex items-center gap-2">
+                        <Image src="/logo.png" alt="NexusSec Logo" width={24} height={24} className="h-6 w-auto" />
                         <span className="text-sm font-semibold tracking-tight text-foreground">
                             NexusSec
                         </span>
