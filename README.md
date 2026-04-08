@@ -117,12 +117,13 @@ I intentionally avoided "easy" options. Building a security product requires str
 | Stack Element | Technology & Version | Why Used? |
 | --- | --- | --- |
 | **Frontend** | React 19, Next.js 16, Tailwind, Framer Motion | SSR support, premium visual fidelity, and clean layout handling. |
-| **API Backend** | Go 1.23, Gin | Raw performance, low memory footprint, and stellar concurrency abstractions. |
-| **Queue / Broker** | RabbitMQ 3.13 | Ensures jobs survive gateway crashes, implements explicit ACK semantics. |
-| **Worker Engine** | Go 1.23 + Docker SDK | Allows dynamic lifecycle control of containers entirely via Go code. |
+| **API Backend** | Go 1.23, Gin, JWT (RS256) | Raw performance, low memory footprint, and stellar concurrency abstractions. |
+| **Queue / Broker** | RabbitMQ 3.13 | Ensures jobs survive gateway crashes, implements explicit ACK/Nack and DLQ semantics. |
+| **Worker Engine** | Go 1.23 + Docker SDK | Allows dynamic lifecycle control of ephemeral containers entirely via Go code. |
 | **Core Database** | PostgreSQL 16 | Absolute ACID compliance for monetary/status-based transactions. |
 | **Report Database**| MongoDB 7.0 | Dynamic schemas to store unpredictable payload structures from security tools. |
 | **State / Cache** | Redis 7 | `Z-Set` based sliding-window rate limiting. |
+| **Security Tools** | OWASP ZAP, Nmap | Automated scanning algorithms for DAST (Dynamic Application Security Testing) and Port Enumeration. |
 
 ---
 
