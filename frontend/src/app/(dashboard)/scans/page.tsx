@@ -2,32 +2,21 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
-import {
-    ScanSearch,
-    Plus,
-    Globe,
-    Clock,
-    AlertCircle,
-    CheckCircle2,
-    Loader2,
-    XCircle,
-    ChevronRight,
-} from "lucide-react";
+import { motion } from "framer-motion";
 import { fetchApi } from "@/lib/api";
 import type { ScanJob } from "@/types";
 
-// ── Status Config ────────────────────────────────────────────
+/* ── Status ───────────────────────────────────────────────── */
 
-const STATUS_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
-    pending:   { icon: Clock,        color: "text-gray-400",    bg: "bg-gray-500/10 border-gray-500/30" },
-    running:   { icon: Loader2,      color: "text-blue-400",    bg: "bg-blue-500/10 border-blue-500/30" },
-    completed: { icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30" },
-    failed:    { icon: XCircle,      color: "text-red-400",     bg: "bg-red-500/10 border-red-500/30" },
-    cancelled: { icon: AlertCircle,  color: "text-gray-400",    bg: "bg-gray-500/10 border-gray-500/30" },
+const STATUS_DOT: Record<string, string> = {
+    completed: "bg-emerald-400",
+    failed: "bg-rose-400",
+    running: "bg-blue-400 animate-pulse",
+    pending: "bg-zinc-500 animate-pulse",
+    cancelled: "bg-zinc-600",
 };
 
-// ── Main Page Component ──────────────────────────────────────
+/* ── Page ──────────────────────────────────────────────────── */
 
 export default function ScansPage() {
     const [scans, setScans] = useState<ScanJob[]>([]);
@@ -49,129 +38,184 @@ export default function ScansPage() {
         fetchScans();
     }, [fetchScans]);
 
-    const formatDate = (dateStr: string) => {
-        return new Intl.DateTimeFormat("en-US", {
-            dateStyle: "medium",
-            timeStyle: "short",
-        }).format(new Date(dateStr));
-    };
+    const fmt = (d: string) =>
+        new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        }).format(new Date(d));
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* ── Header ──────────────────────────────────────── */}
-            <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                        Scan History
+        <div className="space-y-8 max-w-[1000px]">
+            {/* ── Header ─────────────────────────────────────── */}
+            <div className="flex items-end justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                        Scans
                     </h1>
-                    <p className="text-sm text-muted-foreground">
-                        View and manage your vulnerability scan jobs.
+                    <p className="text-sm text-zinc-500 mt-0.5">
+                        All vulnerability scan jobs.
                     </p>
                 </div>
                 <Link
                     href="/scans/new"
-                    className={cn(
-                        "inline-flex items-center gap-2 rounded-xl px-4 py-2.5",
-                        "bg-primary text-primary-foreground text-sm font-medium",
-                        "hover:bg-primary/90 transition-colors",
-                        "shadow-lg shadow-primary/25"
-                    )}
+                    className="h-9 px-4 rounded-lg text-xs font-medium bg-white/[0.06] text-zinc-200 border border-zinc-700 hover:bg-white/[0.1] hover:border-zinc-500 transition-all inline-flex items-center gap-1.5"
                 >
-                    <Plus className="h-4 w-4" />
-                    New Scan
+                    <span className="text-zinc-400">+</span> New Scan
                 </Link>
             </div>
 
-            {/* ── Loading State ────────────────────────────────── */}
-            {loading && (
-                <div className="flex flex-col items-center justify-center py-24 space-y-4">
-                    <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                    <p className="text-sm text-muted-foreground">Loading scans...</p>
-                </div>
-            )}
-
-            {/* ── Error State ──────────────────────────────────── */}
+            {/* ── Error ──────────────────────────────────────── */}
             {error && !loading && (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-6 text-center">
-                    <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-3" />
-                    <p className="text-sm text-red-400">{error}</p>
+                <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] px-5 py-4">
+                    <p className="text-xs text-rose-400">{error}</p>
                     <button
-                        onClick={() => { setError(null); setLoading(true); fetchScans(); }}
-                        className="mt-4 text-xs text-primary hover:underline"
+                        onClick={() => {
+                            setError(null);
+                            setLoading(true);
+                            fetchScans();
+                        }}
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300 mt-2 transition-colors"
                     >
-                        Retry
+                        Retry →
                     </button>
                 </div>
             )}
 
-            {/* ── Empty State ──────────────────────────────────── */}
-            {!loading && !error && scans.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-24 space-y-4 rounded-xl border border-dashed border-border bg-card/50">
-                    <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                        <ScanSearch className="h-8 w-8 text-primary" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-foreground">No scans yet</h3>
-                    <p className="text-sm text-muted-foreground max-w-sm text-center">
-                        Start your first security scan by clicking the &quot;New Scan&quot; button above.
-                    </p>
+            {/* ── Loading ────────────────────────────────────── */}
+            {loading && (
+                <div className="py-20 text-center text-xs text-zinc-600">
+                    Loading…
                 </div>
             )}
 
-            {/* ── Scan List ────────────────────────────────────── */}
-            {!loading && !error && scans.length > 0 && (
-                <div className="space-y-3">
-                    {scans.map((scan) => {
-                        const cfg = STATUS_CONFIG[scan.status] || STATUS_CONFIG.pending;
-                        const Icon = cfg.icon;
-                        return (
-                            <Link
-                                key={scan.id}
-                                href={`/scans/${scan.id}`}
-                                className={cn(
-                                    "flex items-center gap-4 p-4 rounded-xl border border-border bg-card",
-                                    "hover:border-primary/30 hover:bg-card/80 transition-all group"
-                                )}
-                            >
-                                {/* Status Icon */}
-                                <div className={cn("flex items-center justify-center h-10 w-10 rounded-lg border shrink-0", cfg.bg)}>
-                                    <Icon className={cn("h-5 w-5", cfg.color, scan.status === "running" && "animate-spin")} />
-                                </div>
-
-                                {/* Info */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                        <span className="text-sm font-medium text-foreground truncate">
-                                            {scan.target_url || "Unknown target"}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                                        <span className="uppercase font-semibold tracking-wider">{scan.scan_type}</span>
-                                        <span>•</span>
-                                        <span>{formatDate(scan.created_at)}</span>
-                                        {scan.status === "running" && scan.progress > 0 && (
-                                            <>
-                                                <span>•</span>
-                                                <span className="text-blue-400 font-mono">{scan.progress}%</span>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Status Badge */}
-                                <span className={cn(
-                                    "inline-flex items-center rounded-md border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                                    cfg.bg, cfg.color
-                                )}>
-                                    {scan.status}
-                                </span>
-
-                                {/* Arrow */}
-                                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
-                            </Link>
-                        );
-                    })}
+            {/* ── Empty ──────────────────────────────────────── */}
+            {!loading && !error && scans.length === 0 && (
+                <div className="py-20 text-center">
+                    <div className="text-4xl font-light font-mono text-zinc-700 mb-2">
+                        0
+                    </div>
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-600 mb-6">
+                        scans recorded
+                    </div>
+                    <Link
+                        href="/scans/new"
+                        className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                        Launch your first scan →
+                    </Link>
                 </div>
+            )}
+
+            {/* ── Scan Table ─────────────────────────────────── */}
+            {!loading && !error && scans.length > 0 && (
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 overflow-hidden"
+                >
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-zinc-800/40">
+                                {["Engine", "Target", "Status", "Progress", "Created"].map(
+                                    (h) => (
+                                        <th
+                                            key={h}
+                                            className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-medium"
+                                        >
+                                            {h}
+                                        </th>
+                                    )
+                                )}
+                                <th className="w-10" />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {scans.map((scan, i) => {
+                                const sl = scan.status.toLowerCase();
+                                const isTerminal = ["completed", "failed", "cancelled"].includes(sl);
+                                const progress = isTerminal
+                                    ? sl === "completed"
+                                        ? 100
+                                        : scan.progress
+                                    : scan.progress;
+
+                                return (
+                                    <motion.tr
+                                        key={scan.id}
+                                        initial={{ opacity: 0, x: -6 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{
+                                            delay: i * 0.03,
+                                            duration: 0.25,
+                                        }}
+                                        className="border-b border-zinc-800/25 hover:bg-white/[0.015] transition-colors group"
+                                    >
+                                        <td className="px-5 py-3.5">
+                                            <span className="text-xs font-mono text-zinc-300 uppercase">
+                                                {scan.scan_type}
+                                            </span>
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            <span className="text-xs text-zinc-400 truncate block max-w-[300px]">
+                                                {scan.target_url}
+                                            </span>
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            <div className="flex items-center gap-2">
+                                                <div
+                                                    className={`w-1.5 h-1.5 rounded-full ${
+                                                        STATUS_DOT[sl] || "bg-zinc-600"
+                                                    }`}
+                                                />
+                                                <span className="text-xs text-zinc-500 capitalize">
+                                                    {scan.status}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            {/* Mini progress bar */}
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-16 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full transition-all duration-500 ${
+                                                            sl === "completed"
+                                                                ? "bg-emerald-500"
+                                                                : sl === "failed"
+                                                                ? "bg-rose-500"
+                                                                : "bg-blue-500"
+                                                        }`}
+                                                        style={{
+                                                            width: `${progress}%`,
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-[10px] font-mono text-zinc-600 w-7 text-right">
+                                                    {progress}%
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            <span className="text-xs text-zinc-600 font-mono">
+                                                {fmt(scan.created_at)}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-3.5">
+                                            <Link
+                                                href={`/scans/${scan.id}`}
+                                                className="text-zinc-700 hover:text-zinc-400 transition-colors text-xs"
+                                            >
+                                                →
+                                            </Link>
+                                        </td>
+                                    </motion.tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </motion.div>
             )}
         </div>
     );
