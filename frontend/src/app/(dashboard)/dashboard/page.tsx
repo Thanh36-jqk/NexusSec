@@ -479,10 +479,10 @@ export default function DashboardPage() {
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: 0.35 + i * 0.04, duration: 0.3 }}
                                             onClick={() => setSelectedScan(scan)}
-                                            className={`border-b border-zinc-800/30 cursor-pointer transition-colors ${
+                                            className={`border-b border-zinc-800/30 cursor-pointer transition-all border-l-2 ${
                                                 isSelected
-                                                    ? "bg-white/[0.03]"
-                                                    : "hover:bg-white/[0.02]"
+                                                    ? "border-l-blue-500 bg-blue-500/[0.03]"
+                                                    : "border-l-transparent hover:border-l-zinc-700"
                                             }`}
                                         >
                                             <td className="px-5 py-3">

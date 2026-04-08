@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { fetchApi } from "@/lib/api";
-import { Shield, Plus, Target, Check, AlertCircle, Loader2 } from "lucide-react";
 
-// DTOs based on backend models
+/* ── Types ────────────────────────────────────────────────── */
+
 interface TargetResponse {
     id: string;
     name: string;
@@ -13,6 +14,26 @@ interface TargetResponse {
     description?: string;
     created_at: string;
 }
+
+const SCAN_TYPES = [
+    {
+        value: "zap" as const,
+        label: "ZAP",
+        desc: "Dynamic application security testing for web apps.",
+    },
+    {
+        value: "nmap" as const,
+        label: "Nmap",
+        desc: "Port scanning and service enumeration.",
+    },
+    {
+        value: "full" as const,
+        label: "Full",
+        desc: "Combined ZAP + Nmap orchestration.",
+    },
+];
+
+/* ── Page ──────────────────────────────────────────────────── */
 
 export default function NewScanPage() {
     const router = useRouter();
@@ -24,43 +45,42 @@ export default function NewScanPage() {
     const [scanType, setScanType] = useState<"zap" | "nmap" | "full">("zap");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // New target creation form
-    const [isCreatingTarget, setIsCreatingTarget] = useState(false);
-    const [newTargetName, setNewTargetName] = useState("");
-    const [newTargetUrl, setNewTargetUrl] = useState("");
+    // Create target
+    const [showCreate, setShowCreate] = useState(false);
+    const [newName, setNewName] = useState("");
+    const [newUrl, setNewUrl] = useState("");
 
     useEffect(() => {
-        const loadTargets = async () => {
+        async function load() {
             try {
-                const res = await fetchApi<{ data: TargetResponse[] }>('/targets');
+                const res = await fetchApi<{ data: TargetResponse[] }>("/targets");
                 setTargets(res.data || []);
             } catch (err: any) {
                 setError(err.message || "Failed to load targets");
             } finally {
                 setLoadingTargets(false);
             }
-        };
-        loadTargets();
+        }
+        load();
     }, []);
 
     const handleCreateTarget = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
         try {
-            const res = await fetchApi<{ data: TargetResponse }>('/targets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const res = await fetchApi<{ data: TargetResponse }>("/targets", {
+                method: "POST",
                 body: JSON.stringify({
-                    name: newTargetName,
-                    base_url: newTargetUrl,
-                    description: "Created via New Scan flow"
-                })
+                    name: newName,
+                    base_url: newUrl,
+                    description: "Created via New Scan flow",
+                }),
             });
             setTargets([res.data, ...targets]);
             setSelectedTargetId(res.data.id);
-            setIsCreatingTarget(false);
-            setNewTargetName("");
-            setNewTargetUrl("");
+            setShowCreate(false);
+            setNewName("");
+            setNewUrl("");
         } catch (err: any) {
             setError(err.message || "Failed to create target");
         }
@@ -71,13 +91,12 @@ export default function NewScanPage() {
         setIsSubmitting(true);
         setError(null);
         try {
-            const res = await fetchApi<{ data: { id: string } }>('/scans', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const res = await fetchApi<{ data: { id: string } }>("/scans", {
+                method: "POST",
                 body: JSON.stringify({
                     target_id: selectedTargetId,
-                    scan_type: scanType
-                })
+                    scan_type: scanType,
+                }),
             });
             router.push(`/scans/${res.data.id}`);
         } catch (err: any) {
@@ -87,212 +106,244 @@ export default function NewScanPage() {
     };
 
     return (
-        <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Header */}
+        <div className="max-w-2xl mx-auto space-y-8">
+            {/* ── Header ─────────────────────────────────────── */}
             <div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-primary/10 border border-primary/20">
-                        <Plus className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                            Configure New Scan
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            Select a target and configure scan options to begin.
-                        </p>
-                    </div>
-                </div>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                    New Scan
+                </h1>
+                <p className="text-sm text-zinc-500 mt-0.5">
+                    Configure and launch a security scan.
+                </p>
             </div>
 
-            {error && (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+            {/* ── Error ──────────────────────────────────────── */}
+            <AnimatePresence>
+                {error && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] px-5 py-3 overflow-hidden"
+                    >
+                        <p className="text-xs text-rose-400">{error}</p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Step 1: Target ──────────────────────────────── */}
+            <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05, duration: 0.3 }}
+            >
+                <div className="flex items-center justify-between mb-3">
                     <div>
-                        <p className="text-sm font-medium text-red-400">Error</p>
-                        <p className="text-sm text-red-400/80 mt-1">{error}</p>
+                        <h2 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                            Step 1
+                        </h2>
+                        <h3 className="text-sm font-medium text-zinc-300 mt-0.5">
+                            Select Target
+                        </h3>
                     </div>
-                </div>
-            )}
-
-            <div className="bg-card border border-border rounded-xl p-6 space-y-8">
-                {/* ── Step 1: Select Target ───────────────────── */}
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-base font-semibold text-foreground">1. Select Target</h2>
-                            <p className="text-sm text-muted-foreground mt-1">Choose an existing target or create a new one.</p>
-                        </div>
-                        {!isCreatingTarget && (
-                            <button
-                                onClick={() => setIsCreatingTarget(true)}
-                                className="text-sm font-medium text-primary hover:underline"
-                            >
-                                + New Target
-                            </button>
-                        )}
-                    </div>
-
-                    {isCreatingTarget ? (
-                        <form onSubmit={handleCreateTarget} className="p-4 bg-muted/20 border border-border rounded-lg space-y-4">
-                            <h3 className="text-sm font-medium text-foreground">Create Target</h3>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label className="block text-xs font-medium text-muted-foreground mb-1">Target Name</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        placeholder="e.g. Production API"
-                                        value={newTargetName}
-                                        onChange={(e) => setNewTargetName(e.target.value)}
-                                        className="w-full h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-muted-foreground mb-1">Base URL</label>
-                                    <input
-                                        required
-                                        type="url"
-                                        placeholder="https://api.example.com"
-                                        value={newTargetUrl}
-                                        onChange={(e) => setNewTargetUrl(e.target.value)}
-                                        className="w-full h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex gap-2 justify-end">
-                                <button
-                                    type="button"
-                                    onClick={() => { setIsCreatingTarget(false); setError(null); }}
-                                    className="text-sm text-muted-foreground hover:text-foreground px-3 py-2"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                                >
-                                    Save Target
-                                </button>
-                            </div>
-                        </form>
-                    ) : loadingTargets ? (
-                        <div className="flex items-center justify-center p-8 border border-border rounded-lg border-dashed">
-                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : targets.length === 0 ? (
-                        <div className="text-center p-8 border border-border rounded-lg border-dashed">
-                            <Target className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
-                            <p className="text-sm text-foreground font-medium">No targets found</p>
-                            <p className="text-xs text-muted-foreground mt-1 mb-4">You need to create a target before running a scan.</p>
-                            <button
-                                onClick={() => setIsCreatingTarget(true)}
-                                className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium"
-                            >
-                                Create Target
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="grid gap-3 md:grid-cols-2">
-                            {targets.map(t => (
-                                <div
-                                    key={t.id}
-                                    onClick={() => setSelectedTargetId(t.id)}
-                                    className={`relative p-4 cursor-pointer rounded-lg border transition-all ${
-                                        selectedTargetId === t.id 
-                                        ? "border-primary bg-primary/5 ring-1 ring-primary/20" 
-                                        : "border-border bg-background hover:border-primary/50"
-                                    }`}
-                                >
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-sm font-medium text-foreground">{t.name}</p>
-                                            <p className="text-xs text-muted-foreground mt-1 truncate">{t.base_url}</p>
-                                        </div>
-                                        {selectedTargetId === t.id && (
-                                            <Check className="h-4 w-4 text-primary shrink-0" />
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                    {!showCreate && (
+                        <button
+                            onClick={() => setShowCreate(true)}
+                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                        >
+                            + Create target
+                        </button>
                     )}
                 </div>
 
-                {/* ── Step 2: Configure ───────────────────────── */}
-                <div className="space-y-4">
-                    <div>
-                        <h2 className="text-base font-semibold text-foreground">2. Scan Configuration</h2>
-                        <p className="text-sm text-muted-foreground mt-1">Select the type of security scan.</p>
-                    </div>
-                    
-                    <div className="grid gap-3 md:grid-cols-3">
-                        {/* ZAP */}
-                        <div
-                            onClick={() => setScanType("zap")}
-                            className={`p-4 cursor-pointer rounded-lg border transition-all ${
-                                scanType === "zap" 
-                                ? "border-primary bg-primary/5 ring-1 ring-primary/20" 
-                                : "border-border bg-background hover:border-primary/50"
-                            }`}
-                        >
-                            <Shield className={`h-6 w-6 mb-3 ${scanType === "zap" ? "text-primary" : "text-muted-foreground"}`} />
-                            <p className="text-sm font-medium text-foreground">DAST Scanner (ZAP)</p>
-                            <p className="text-xs text-muted-foreground mt-1">Deep dynamic application security testing for modern web apps.</p>
-                        </div>
-
-                        {/* Nmap */}
-                        <div
-                            onClick={() => setScanType("nmap")}
-                            className={`p-4 cursor-pointer rounded-lg border transition-all ${
-                                scanType === "nmap" 
-                                ? "border-primary bg-primary/5 ring-1 ring-primary/20" 
-                                : "border-border bg-background hover:border-primary/50"
-                            }`}
-                        >
-                            <Target className={`h-6 w-6 mb-3 ${scanType === "nmap" ? "text-primary" : "text-muted-foreground"}`} />
-                            <p className="text-sm font-medium text-foreground">Network Scan (Nmap)</p>
-                            <p className="text-xs text-muted-foreground mt-1">Port scanning and service enumeration for infrastructure.</p>
-                        </div>
-
-                        {/* Full */}
-                        <div
-                            onClick={() => setScanType("full")}
-                            className={`p-4 cursor-pointer rounded-lg border transition-all ${
-                                scanType === "full" 
-                                ? "border-primary bg-primary/5 ring-1 ring-primary/20" 
-                                : "border-border bg-background hover:border-primary/50"
-                            }`}
-                        >
-                            <AlertCircle className={`h-6 w-6 mb-3 ${scanType === "full" ? "text-primary" : "text-muted-foreground"}`} />
-                            <p className="text-sm font-medium text-foreground">Full Orhcestration</p>
-                            <p className="text-xs text-muted-foreground mt-1">Comprehensive scan combining both ZAP and Nmap engines.</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Submit ───────────────────────────────────── */}
-                <div className="pt-4 border-t border-border flex justify-end">
-                    <button
-                        onClick={handleStartScan}
-                        disabled={!selectedTargetId || isSubmitting}
-                        className={`h-10 px-6 rounded-lg text-sm font-medium inline-flex items-center gap-2 transition-all ${
-                            selectedTargetId && !isSubmitting
-                            ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                            : "bg-muted text-muted-foreground cursor-not-allowed"
-                        }`}
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Starting Scan...
-                            </>
-                        ) : (
-                            <>Start Scan</>
+                <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 overflow-hidden">
+                    {/* Create form */}
+                    <AnimatePresence>
+                        {showCreate && (
+                            <motion.form
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.25 }}
+                                onSubmit={handleCreateTarget}
+                                className="overflow-hidden border-b border-zinc-800/40"
+                            >
+                                <div className="p-4 space-y-3">
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <input
+                                            required
+                                            type="text"
+                                            placeholder="Target name"
+                                            value={newName}
+                                            onChange={(e) => setNewName(e.target.value)}
+                                            className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+                                        />
+                                        <input
+                                            required
+                                            type="url"
+                                            placeholder="https://target.com"
+                                            value={newUrl}
+                                            onChange={(e) => setNewUrl(e.target.value)}
+                                            className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+                                        />
+                                    </div>
+                                    <div className="flex gap-2 justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCreate(false)}
+                                            className="text-xs text-zinc-600 hover:text-zinc-400 px-3 py-1.5 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="h-8 px-4 rounded-lg text-xs font-medium bg-white/[0.06] text-zinc-200 border border-zinc-700 hover:bg-white/[0.1] hover:border-zinc-500 transition-all"
+                                        >
+                                            Save
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.form>
                         )}
-                    </button>
+                    </AnimatePresence>
+
+                    {/* Target list */}
+                    {loadingTargets ? (
+                        <div className="p-8 text-center text-xs text-zinc-600">
+                            Loading targets…
+                        </div>
+                    ) : targets.length === 0 ? (
+                        <div className="p-8 text-center">
+                            <p className="text-xs text-zinc-500 mb-3">
+                                No targets yet — create one to get started.
+                            </p>
+                            {!showCreate && (
+                                <button
+                                    onClick={() => setShowCreate(true)}
+                                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                                >
+                                    Create target →
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-zinc-800/30 max-h-[280px] overflow-y-auto">
+                            {targets.map((t) => {
+                                const isSelected = selectedTargetId === t.id;
+                                return (
+                                    <button
+                                        key={t.id}
+                                        onClick={() => setSelectedTargetId(t.id)}
+                                        className={`w-full text-left px-5 py-3.5 flex items-center justify-between transition-all border-l-2 ${
+                                            isSelected
+                                                ? "border-l-blue-500 bg-blue-500/[0.03]"
+                                                : "border-l-transparent hover:border-l-zinc-700"
+                                        }`}
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="text-sm text-zinc-300 truncate">
+                                                {t.name}
+                                            </div>
+                                            <div className="text-[11px] text-zinc-600 truncate mt-0.5">
+                                                {t.base_url}
+                                            </div>
+                                        </div>
+                                        {isSelected && (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0 ml-3" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
-            </div>
+            </motion.section>
+
+            {/* ── Step 2: Engine ──────────────────────────────── */}
+            <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.3 }}
+            >
+                <div className="mb-3">
+                    <h2 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                        Step 2
+                    </h2>
+                    <h3 className="text-sm font-medium text-zinc-300 mt-0.5">
+                        Scan Engine
+                    </h3>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                    {SCAN_TYPES.map((t) => {
+                        const isActive = scanType === t.value;
+                        return (
+                            <button
+                                key={t.value}
+                                onClick={() => setScanType(t.value)}
+                                className={`text-left rounded-xl border p-4 transition-all ${
+                                    isActive
+                                        ? "border-blue-500/40 bg-blue-500/[0.04] shadow-[0_0_20px_rgba(59,130,246,0.06)]"
+                                        : "border-zinc-800/80 bg-zinc-950/50 hover:border-zinc-700"
+                                }`}
+                            >
+                                <div
+                                    className={`text-sm font-mono font-medium mb-1 ${
+                                        isActive ? "text-blue-400" : "text-zinc-400"
+                                    }`}
+                                >
+                                    {t.label}
+                                </div>
+                                <div className="text-[11px] text-zinc-600 leading-relaxed">
+                                    {t.desc}
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </motion.section>
+
+            {/* ── Launch ──────────────────────────────────────── */}
+            <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.3 }}
+                className="pt-4 border-t border-zinc-800/40 flex items-center justify-between"
+            >
+                <div className="text-xs text-zinc-600">
+                    {selectedTargetId ? (
+                        <span>
+                            Target selected · Engine:{" "}
+                            <span className="font-mono text-zinc-400">
+                                {scanType.toUpperCase()}
+                            </span>
+                        </span>
+                    ) : (
+                        "Select a target to continue."
+                    )}
+                </div>
+                <button
+                    onClick={handleStartScan}
+                    disabled={!selectedTargetId || isSubmitting}
+                    className="h-10 px-6 rounded-xl text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={
+                        selectedTargetId && !isSubmitting
+                            ? {
+                                  background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                                  color: "#fff",
+                                  boxShadow:
+                                      "0 0 0 1px rgba(59,130,246,0.3), 0 4px 20px rgba(59,130,246,0.25)",
+                              }
+                            : {
+                                  background: "#18181b",
+                                  color: "#52525b",
+                                  border: "1px solid #27272a",
+                              }
+                    }
+                >
+                    {isSubmitting ? "Starting…" : "Start Scan"}
+                </button>
+            </motion.div>
         </div>
     );
 }

@@ -23,6 +23,10 @@ export default function ScansPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Filters
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState<string>("all");
+
     const fetchScans = useCallback(async () => {
         try {
             const data = await fetchApi<{ data: ScanJob[] }>("/scans");
@@ -46,8 +50,27 @@ export default function ScansPage() {
             minute: "2-digit",
         }).format(new Date(d));
 
+    // Filtered scans
+    const filtered = scans.filter((s) => {
+        const matchSearch =
+            !search ||
+            s.target_url.toLowerCase().includes(search.toLowerCase()) ||
+            s.scan_type.toLowerCase().includes(search.toLowerCase());
+        const matchStatus =
+            statusFilter === "all" || s.status.toLowerCase() === statusFilter;
+        return matchSearch && matchStatus;
+    });
+
+    // Stats
+    const counts = {
+        all: scans.length,
+        completed: scans.filter((s) => s.status.toLowerCase() === "completed").length,
+        running: scans.filter((s) => ["running", "pending"].includes(s.status.toLowerCase())).length,
+        failed: scans.filter((s) => s.status.toLowerCase() === "failed").length,
+    };
+
     return (
-        <div className="space-y-8 max-w-[1000px]">
+        <div className="space-y-6 max-w-[1100px]">
             {/* ── Header ─────────────────────────────────────── */}
             <div className="flex items-end justify-between gap-4">
                 <div>
@@ -55,20 +78,72 @@ export default function ScansPage() {
                         Scans
                     </h1>
                     <p className="text-sm text-zinc-500 mt-0.5">
-                        All vulnerability scan jobs.
+                        Manage and monitor your vulnerability scan jobs.
                     </p>
                 </div>
                 <Link
                     href="/scans/new"
-                    className="h-9 px-4 rounded-lg text-xs font-medium bg-white/[0.06] text-zinc-200 border border-zinc-700 hover:bg-white/[0.1] hover:border-zinc-500 transition-all inline-flex items-center gap-1.5"
+                    className="h-10 px-5 rounded-xl text-sm font-medium inline-flex items-center gap-2 transition-all"
+                    style={{
+                        background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                        color: "#fff",
+                        boxShadow: "0 0 0 1px rgba(59,130,246,0.3), 0 4px 20px rgba(59,130,246,0.25)",
+                    }}
                 >
-                    <span className="text-zinc-400">+</span> New Scan
+                    <span className="text-blue-200 text-lg leading-none">+</span>
+                    New Scan
                 </Link>
             </div>
 
+            {/* ── Filter Bar ─────────────────────────────────── */}
+            <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col sm:flex-row gap-3"
+            >
+                {/* Search */}
+                <div className="flex-1">
+                    <input
+                        type="text"
+                        placeholder="Search by target or engine…"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+                    />
+                </div>
+
+                {/* Status tabs */}
+                <div className="flex gap-1 bg-zinc-900/80 rounded-lg p-0.5 border border-zinc-800/60">
+                    {(
+                        [
+                            { key: "all", label: "All" },
+                            { key: "completed", label: "Done" },
+                            { key: "running", label: "Active" },
+                            { key: "failed", label: "Failed" },
+                        ] as const
+                    ).map((tab) => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setStatusFilter(tab.key)}
+                            className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${
+                                statusFilter === tab.key
+                                    ? "bg-zinc-800 text-zinc-200 shadow-sm"
+                                    : "text-zinc-500 hover:text-zinc-400"
+                            }`}
+                        >
+                            {tab.label}
+                            <span className="ml-1.5 text-zinc-600">
+                                {counts[tab.key as keyof typeof counts] ?? 0}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            </motion.div>
+
             {/* ── Error ──────────────────────────────────────── */}
             {error && !loading && (
-                <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] px-5 py-4">
+                <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] px-5 py-4 flex items-center justify-between">
                     <p className="text-xs text-rose-400">{error}</p>
                     <button
                         onClick={() => {
@@ -76,7 +151,7 @@ export default function ScansPage() {
                             setLoading(true);
                             fetchScans();
                         }}
-                        className="text-[10px] text-zinc-500 hover:text-zinc-300 mt-2 transition-colors"
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
                     >
                         Retry →
                     </button>
@@ -93,23 +168,39 @@ export default function ScansPage() {
             {/* ── Empty ──────────────────────────────────────── */}
             {!loading && !error && scans.length === 0 && (
                 <div className="py-20 text-center">
-                    <div className="text-4xl font-light font-mono text-zinc-700 mb-2">
-                        0
+                    <div className="text-5xl font-extralight font-mono text-zinc-800 mb-3">
+                        ∅
                     </div>
-                    <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-600 mb-6">
-                        scans recorded
-                    </div>
+                    <p className="text-sm text-zinc-500 mb-4">
+                        No scans recorded yet.
+                    </p>
                     <Link
                         href="/scans/new"
-                        className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                     >
                         Launch your first scan →
                     </Link>
                 </div>
             )}
 
+            {/* ── No results for filter ──────────────────────── */}
+            {!loading && !error && scans.length > 0 && filtered.length === 0 && (
+                <div className="py-16 text-center">
+                    <p className="text-sm text-zinc-500">No scans match your filters.</p>
+                    <button
+                        onClick={() => {
+                            setSearch("");
+                            setStatusFilter("all");
+                        }}
+                        className="text-xs text-zinc-600 hover:text-zinc-400 mt-2 transition-colors"
+                    >
+                        Clear filters →
+                    </button>
+                </div>
+            )}
+
             {/* ── Scan Table ─────────────────────────────────── */}
-            {!loading && !error && scans.length > 0 && (
+            {!loading && !error && filtered.length > 0 && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -119,21 +210,22 @@ export default function ScansPage() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-zinc-800/40">
-                                {["Engine", "Target", "Status", "Progress", "Created"].map(
+                                {["Engine", "Target", "Status", "Progress", "Created", ""].map(
                                     (h) => (
                                         <th
-                                            key={h}
-                                            className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-medium"
+                                            key={h || "action"}
+                                            className={`text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-medium ${
+                                                h === "" ? "w-16" : ""
+                                            }`}
                                         >
                                             {h}
                                         </th>
                                     )
                                 )}
-                                <th className="w-10" />
                             </tr>
                         </thead>
                         <tbody>
-                            {scans.map((scan, i) => {
+                            {filtered.map((scan, i) => {
                                 const sl = scan.status.toLowerCase();
                                 const isTerminal = ["completed", "failed", "cancelled"].includes(sl);
                                 const progress = isTerminal
@@ -151,7 +243,7 @@ export default function ScansPage() {
                                             delay: i * 0.03,
                                             duration: 0.25,
                                         }}
-                                        className="border-b border-zinc-800/25 hover:bg-white/[0.015] transition-colors group"
+                                        className="border-b border-zinc-800/25 hover:border-l-zinc-600 border-l-2 border-l-transparent transition-all group"
                                     >
                                         <td className="px-5 py-3.5">
                                             <span className="text-xs font-mono text-zinc-300 uppercase">
@@ -176,7 +268,6 @@ export default function ScansPage() {
                                             </div>
                                         </td>
                                         <td className="px-5 py-3.5">
-                                            {/* Mini progress bar */}
                                             <div className="flex items-center gap-2">
                                                 <div className="w-16 h-1 rounded-full bg-zinc-800 overflow-hidden">
                                                     <div
@@ -202,12 +293,12 @@ export default function ScansPage() {
                                                 {fmt(scan.created_at)}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-3.5">
+                                        <td className="px-5 py-3.5 text-right">
                                             <Link
                                                 href={`/scans/${scan.id}`}
-                                                className="text-zinc-700 hover:text-zinc-400 transition-colors text-xs"
+                                                className="inline-flex h-7 px-3 rounded-md text-[10px] font-medium items-center bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-700/40 transition-all opacity-0 group-hover:opacity-100"
                                             >
-                                                →
+                                                View
                                             </Link>
                                         </td>
                                     </motion.tr>
@@ -215,6 +306,24 @@ export default function ScansPage() {
                             })}
                         </tbody>
                     </table>
+
+                    {/* Table footer */}
+                    <div className="px-5 py-2.5 border-t border-zinc-800/40 flex items-center justify-between">
+                        <span className="text-[10px] text-zinc-600">
+                            {filtered.length} of {scans.length} scans
+                        </span>
+                        {filtered.length < scans.length && (
+                            <button
+                                onClick={() => {
+                                    setSearch("");
+                                    setStatusFilter("all");
+                                }}
+                                className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                            >
+                                Clear filters
+                            </button>
+                        )}
+                    </div>
                 </motion.div>
             )}
         </div>
