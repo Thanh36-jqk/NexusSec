@@ -103,9 +103,12 @@ func main() {
 	// ── 7. Initialize Handlers ──────────────────────────────
 	authHandler := handler.NewAuthHandler(
 		pgDB,
+		redisClient,
 		jwtPrivateKey,
-		cfg.JWT.Issuer,
-		cfg.JWT.Expiration,
+		&cfg.JWT,
+		&cfg.SMTP,
+		&cfg.OAuth,
+		cfg.FrontendURL,
 		log,
 	)
 

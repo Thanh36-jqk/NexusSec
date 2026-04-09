@@ -16,9 +16,12 @@ require (
 	github.com/spf13/viper v1.21.0
 	go.mongodb.org/mongo-driver v1.17.9
 	golang.org/x/crypto v0.49.0
+	golang.org/x/oauth2 v0.36.0
+	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	github.com/Microsoft/go-winio v0.4.21 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
@@ -90,5 +93,6 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )

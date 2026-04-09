@@ -30,19 +30,23 @@ CREATE TYPE scan_type AS ENUM (
 -- ────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS users (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email       VARCHAR(255)  NOT NULL UNIQUE,
-    username    VARCHAR(100)  NOT NULL UNIQUE,
-    password    VARCHAR(255)  NOT NULL,           -- bcrypt hash
-    role        VARCHAR(20)   NOT NULL DEFAULT 'user',
-    is_active   BOOLEAN       NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email         VARCHAR(255)  NOT NULL UNIQUE,
+    username      VARCHAR(100)  NOT NULL UNIQUE,
+    password      VARCHAR(255),                     -- bcrypt hash (can be null for OAuth)
+    role          VARCHAR(20)   NOT NULL DEFAULT 'user',
+    is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
+    is_verified   BOOLEAN       NOT NULL DEFAULT FALSE,
+    auth_provider VARCHAR(20)   NOT NULL DEFAULT 'local',
+    provider_id   VARCHAR(255),
+    created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 -- Index for login lookups
-CREATE INDEX idx_users_email    ON users (email);
-CREATE INDEX idx_users_username ON users (username);
+CREATE INDEX idx_users_email         ON users (email);
+CREATE INDEX idx_users_username      ON users (username);
+CREATE INDEX idx_users_provider_id   ON users (auth_provider, provider_id);
 
 -- ────────────────────────────────────────────────────────────
 --  TARGETS TABLE

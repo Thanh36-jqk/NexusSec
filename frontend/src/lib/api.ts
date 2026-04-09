@@ -41,7 +41,7 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
         url += "?" + new URLSearchParams(params).toString();
     }
 
-    const response = await fetch(url, { headers: headersInit, ...rest });
+    const response = await fetch(url, { headers: headersInit, credentials: "include", ...rest });
 
     if (response.status === 401) {
         // Unauthorized -> Clear token and send to login
@@ -53,6 +53,13 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
     }
 
     const data = await response.json().catch(() => null);
+
+    if (response.status === 403 && data?.message === "email_not_verified") {
+        if (typeof window !== "undefined") {
+            window.location.href = "/verify-email";
+        }
+        throw new Error(data?.message);
+    }
 
     if (!response.ok) {
         throw new Error(data?.message || `HTTP ${response.status}`);

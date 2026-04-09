@@ -13,15 +13,18 @@ import (
 // Config holds all configuration for all services (Gateway + Scanner).
 // Values are loaded from environment variables or a config file.
 type Config struct {
-	Server   ServerConfig
-	Postgres PostgresConfig
-	Mongo    MongoConfig
-	Redis    RedisConfig
-	RabbitMQ RabbitMQConfig
-	JWT      JWTConfig
-	CORS     CORSConfig
-	Proxy    ProxyConfig
-	Scanner  ScannerConfig
+	Server      ServerConfig
+	Postgres    PostgresConfig
+	Mongo       MongoConfig
+	Redis       RedisConfig
+	RabbitMQ    RabbitMQConfig
+	JWT         JWTConfig
+	CORS        CORSConfig
+	Proxy       ProxyConfig
+	Scanner     ScannerConfig
+	SMTP        SMTPConfig
+	OAuth       OAuthConfig
+	FrontendURL string `mapstructure:"FRONTEND_URL"`
 }
 
 // ScannerConfig holds configuration for the Scanner Engine worker.
@@ -34,6 +37,20 @@ type ScannerConfig struct {
 	// SECURITY: This MUST NOT be nexussec-network. Scan containers get
 	// outbound internet access only, with zero access to internal services.
 	ScanNetwork string `mapstructure:"SCANNER_NETWORK"`
+}
+
+type SMTPConfig struct {
+	Host     string `mapstructure:"SMTP_HOST"`
+	Port     int    `mapstructure:"SMTP_PORT"`
+	User     string `mapstructure:"SMTP_USER"`
+	Password string `mapstructure:"SMTP_PASS"`
+}
+
+type OAuthConfig struct {
+	GithubClientID     string `mapstructure:"GITHUB_CLIENT_ID"`
+	GithubClientSecret string `mapstructure:"GITHUB_CLIENT_SECRET"`
+	GoogleClientID     string `mapstructure:"GOOGLE_CLIENT_ID"`
+	GoogleClientSecret string `mapstructure:"GOOGLE_CLIENT_SECRET"`
 }
 
 type ServerConfig struct {
@@ -190,6 +207,19 @@ func Load() (*Config, error) {
 			Concurrency: viper.GetInt("SCANNER_CONCURRENCY"),
 			ScanNetwork: viper.GetString("SCANNER_NETWORK"),
 		},
+		SMTP: SMTPConfig{
+			Host:     viper.GetString("SMTP_HOST"),
+			Port:     viper.GetInt("SMTP_PORT"),
+			User:     viper.GetString("SMTP_USER"),
+			Password: viper.GetString("SMTP_PASS"),
+		},
+		OAuth: OAuthConfig{
+			GithubClientID:     viper.GetString("GITHUB_CLIENT_ID"),
+			GithubClientSecret: viper.GetString("GITHUB_CLIENT_SECRET"),
+			GoogleClientID:     viper.GetString("GOOGLE_CLIENT_ID"),
+			GoogleClientSecret: viper.GetString("GOOGLE_CLIENT_SECRET"),
+		},
+		FrontendURL: viper.GetString("FRONTEND_URL"),
 	}
 
 	return cfg, nil
@@ -237,4 +267,7 @@ func setDefaults() {
 	// Scanner Engine
 	viper.SetDefault("SCANNER_CONCURRENCY", 3)
 	viper.SetDefault("SCANNER_NETWORK", "scan-network") // isolated from nexussec-network
+	
+	// Frontend URL
+	viper.SetDefault("FRONTEND_URL", "http://localhost:3000")
 }

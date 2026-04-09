@@ -77,11 +77,17 @@ func (m *JWTAuthMiddleware) Handler() gin.HandlerFunc {
 	}
 }
 
-// extractBearerToken pulls the token from "Authorization: Bearer <token>".
+// extractBearerToken pulls the token from "Authorization: Bearer <token>" or cookie.
 func extractBearerToken(c *gin.Context) (string, error) {
+	// 1. Try Cookie first
+	if token, err := c.Cookie("nexussec_token"); err == nil && token != "" {
+		return token, nil
+	}
+
+	// 2. Try Authorization Header
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		return "", errors.New("authorization header is required")
+		return "", errors.New("authorization header or cookie is required")
 	}
 
 	parts := strings.SplitN(authHeader, " ", 2)

@@ -92,11 +92,27 @@ func Setup(deps *Dependencies) *gin.Engine {
 
 	v1 := engine.Group("/api/v1")
 	{
+		// ── Layer 3: Auth Rate Limiter (5 req/min per IP) ───────
+		// Prevents email spam / brute force OTP
+		authRateLimiter := middleware.NewRateLimiterMiddleware(deps.RedisClient, middleware.RateLimiterConfig{
+			Limit:     5,
+			Window:    1 * time.Minute,
+			KeyPrefix: "nexussec:gateway:ratelimit:auth",
+			FailMode:  middleware.FailClosed,
+		})
+
 		// ── Auth routes (public — no JWT required) ──────────
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/register", deps.AuthHandler.Register)
+			auth.POST("/register", authRateLimiter.Handler(), deps.AuthHandler.Register)
 			auth.POST("/login", deps.AuthHandler.Login)
+			auth.POST("/verify-email", authRateLimiter.Handler(), deps.AuthHandler.VerifyEmail)
+
+			// OAuth2
+			auth.GET("/github/login", deps.AuthHandler.OAuthGitHubLogin)
+			auth.GET("/github/callback", deps.AuthHandler.OAuthGitHubCallback)
+			auth.GET("/google/login", deps.AuthHandler.OAuthGoogleLogin)
+			auth.GET("/google/callback", deps.AuthHandler.OAuthGoogleCallback)
 		}
 
 		// ── Protected routes ────────────────────────────────

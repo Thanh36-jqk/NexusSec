@@ -1,16 +1,21 @@
 package handler
 
 import (
+	"context"
 	"crypto/rsa"
 	"database/sql"
+	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jmoiron/sqlx"
+	"github.com/nexussec/nexussec/internal/infrastructure/config"
 	"github.com/nexussec/nexussec/internal/gateway/middleware"
 	"github.com/nexussec/nexussec/pkg/response"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -44,12 +49,15 @@ type userResponse struct {
 // ── Database Row ─────────────────────────────────────────────
 
 type userRow struct {
-	ID       string `db:"id"`
-	Email    string `db:"email"`
-	Username string `db:"username"`
-	Password string `db:"password"` // bcrypt hash
-	Role     string `db:"role"`
-	IsActive bool   `db:"is_active"`
+	ID           string  `db:"id"`
+	Email        string  `db:"email"`
+	Username     string  `db:"username"`
+	Password     *string `db:"password"` // bcrypt hash, nullable for OAuth
+	Role         string  `db:"role"`
+	IsActive     bool    `db:"is_active"`
+	IsVerified   bool    `db:"is_verified"`
+	AuthProvider string  `db:"auth_provider"`
+	ProviderID   *string `db:"provider_id"`
 }
 
 // ── AuthHandler ──────────────────────────────────────────────
@@ -57,34 +65,35 @@ type userRow struct {
 // AuthHandler handles user registration and login.
 // Dependencies are injected — no globals, no hardcoded keys.
 type AuthHandler struct {
-	db         *sqlx.DB
-	privateKey *rsa.PrivateKey
-	issuer     string
-	expiration time.Duration
-	logger     zerolog.Logger
+	db          *sqlx.DB
+	redis       *redis.Client
+	privateKey  *rsa.PrivateKey
+	jwtCfg      *config.JWTConfig
+	smtpCfg     *config.SMTPConfig
+	oauthCfg    *config.OAuthConfig
+	frontendURL string
+	logger      zerolog.Logger
 }
 
-// NewAuthHandler creates an auth handler with all required dependencies.
-//
-// Parameters:
-//   - db:         PostgreSQL connection pool (sqlx)
-//   - privateKey: RSA private key for signing JWTs (RS256)
-//   - issuer:     JWT "iss" claim value (e.g., "nexussec")
-//   - expiration: JWT lifetime (e.g., 24h)
-//   - logger:     structured logger
 func NewAuthHandler(
 	db *sqlx.DB,
+	redisClient *redis.Client,
 	privateKey *rsa.PrivateKey,
-	issuer string,
-	expiration time.Duration,
+	jwtCfg *config.JWTConfig,
+	smtpCfg *config.SMTPConfig,
+	oauthCfg *config.OAuthConfig,
+	frontendURL string,
 	logger zerolog.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
-		db:         db,
-		privateKey: privateKey,
-		issuer:     issuer,
-		expiration: expiration,
-		logger:     logger.With().Str("handler", "auth").Logger(),
+		db:          db,
+		redis:       redisClient,
+		privateKey:  privateKey,
+		jwtCfg:      jwtCfg,
+		smtpCfg:     smtpCfg,
+		oauthCfg:    oauthCfg,
+		frontendURL: frontendURL,
+		logger:      logger.With().Str("handler", "auth").Logger(),
 	}
 }
 
@@ -120,8 +129,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	// Insert user — PostgreSQL UNIQUE constraints handle duplicates
 	var user userRow
 	err = h.db.QueryRowContext(c.Request.Context(),
-		`INSERT INTO users (email, username, password)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO users (email, username, password, is_verified, auth_provider)
+		 VALUES ($1, $2, $3, false, 'local')
 		 RETURNING id, email, username, role`,
 		req.Email, req.Username, string(hashedPassword),
 	).Scan(&user.ID, &user.Email, &user.Username, &user.Role)
@@ -142,6 +151,19 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		h.logger.Error().Err(err).Msg("failed to insert user")
 		response.InternalError(c, "failed to create user")
 		return
+	}
+
+	// Generate 6-digit OTP
+	otp := fmt.Sprintf("%06d", rand.Intn(1000000))
+	
+	// Save to Redis (ttl = 15m)
+	cacheKey := fmt.Sprintf("nexussec:email_verify:%s", user.Email)
+	err = h.redis.Set(context.Background(), cacheKey, otp, 15*time.Minute).Err()
+	if err != nil {
+		h.logger.Error().Err(err).Msg("failed to save OTP to redis")
+	} else {
+		// Send async email
+		go h.sendVerificationEmail(user.Email, user.Username, otp)
 	}
 
 	h.logger.Info().
@@ -179,31 +201,37 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Look up user by email (uses idx_users_email index)
 	var user userRow
 	err := h.db.QueryRowContext(c.Request.Context(),
-		`SELECT id, email, username, password, role, is_active
+		`SELECT id, email, username, password, role, is_active, is_verified, auth_provider
 		 FROM users WHERE email = $1`,
 		req.Email,
-	).Scan(&user.ID, &user.Email, &user.Username, &user.Password, &user.Role, &user.IsActive)
+	).Scan(&user.ID, &user.Email, &user.Username, &user.Password, &user.Role, &user.IsActive, &user.IsVerified, &user.AuthProvider)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// Deliberately vague message to prevent email enumeration
 			response.Unauthorized(c, "invalid email or password")
 			return
 		}
-
 		h.logger.Error().Err(err).Str("email", req.Email).Msg("failed to query user")
 		response.InternalError(c, "login failed")
 		return
 	}
 
-	// Check if account is active
 	if !user.IsActive {
 		response.Forbidden(c, "account is deactivated")
 		return
 	}
 
-	// Verify password against bcrypt hash
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+	if !user.IsVerified && user.AuthProvider == "local" {
+		response.Error(c, 403, "email_not_verified")
+		return
+	}
+	
+	if user.Password == nil {
+		response.Unauthorized(c, "please use social login for this account")
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(*user.Password), []byte(req.Password)); err != nil {
 		response.Unauthorized(c, "invalid email or password")
 		return
 	}
@@ -224,7 +252,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response.Success(c, "login successful", authResponse{
 		AccessToken: token,
 		TokenType:   "Bearer",
-		ExpiresIn:   int64(h.expiration.Seconds()),
+		ExpiresIn:   int64(h.jwtCfg.Expiration.Seconds()),
 	})
 }
 
@@ -247,9 +275,9 @@ func (h *AuthHandler) generateToken(user userRow) (string, error) {
 		Email:  user.Email,
 		Role:   user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    h.issuer,
+			Issuer:    h.jwtCfg.Issuer,
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(h.expiration)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(h.jwtCfg.Expiration)),
 		},
 	}
 
