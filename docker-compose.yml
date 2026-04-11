@@ -193,7 +193,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 2G    # ZAP Active Scan cần ~1GB JVM heap + overhead
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

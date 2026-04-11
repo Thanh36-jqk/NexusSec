@@ -222,6 +222,15 @@ func (w *Worker) executeSingleScan(ctx context.Context, log zerolog.Logger, deli
 		return
 	}
 
+	// ── ZAP EXIT CODE SEMANTICS ─────────────────────────────────────────
+	// ZAP (zap-full-scan.py) có exit code đặc biệt:
+	//   0 = OK, không có cảnh báo nào
+	//   2 = Có cảnh báo (warnings) → BÌNH THƯỜNG khi tìm thấy lỗ
+	//   3 = Có lỗi fail + có cảnh báo → Vẫn có thể có kết quả
+	//   1 = Internal ZAP error (lỗi thực sự → bỏ)
+	//
+	// Nmap luôn exit 0 khi thành công, khác 0 khi lỗi.
+	// Do đó: chỉ treat exit code 1 là crash thực sự.
 	if result.ExitCode == 1 {
 		outStr := strings.TrimSpace(result.Stdout)
 		if len(outStr) > 1000 {
@@ -233,6 +242,14 @@ func (w *Worker) executeSingleScan(ctx context.Context, log zerolog.Logger, deli
 		w.notifier.MarkFailed(ctx, msg.JobID, errMsg)
 		delivery.Ack(false)
 		return
+	}
+
+	// Log exit code != 0 (ngoài 1) để dễ debug
+	if result.ExitCode != 0 {
+		log.Info().
+			Int64("exit_code", result.ExitCode).
+			Str("scan_type", msg.ScanType).
+			Msg("scan container exited with non-zero code (expected for ZAP with findings)")
 	}
 
 	p, err := parser.GetParser(msg.ScanType)
@@ -301,9 +318,18 @@ func (w *Worker) executeFullScanConcurrent(ctx context.Context, log zerolog.Logg
 			zapErr = fmt.Errorf("execution error: %w", err)
 			return
 		}
+		// Exit code 1 = ZAP internal error. Exit code 2/3 = có alerts (bình thường).
 		if res.ExitCode == 1 {
-			zapErr = fmt.Errorf("container crashed")
+			zapErr = fmt.Errorf("ZAP container crashed (exit code 1)")
+			stderrSnip := res.Stderr
+			if len(stderrSnip) > 500 {
+				stderrSnip = stderrSnip[:500]
+			}
+			zapLog.Error().Int64("exit_code", res.ExitCode).Str("stderr", stderrSnip).Msg("ZAP internal error")
 			return
+		}
+		if res.ExitCode != 0 {
+			zapLog.Info().Int64("exit_code", res.ExitCode).Msg("ZAP finished with alerts (exit code indicates findings)")
 		}
 
 		p, _ := parser.GetParser("zap")
@@ -387,15 +413,34 @@ func (w *Worker) executeFullScanConcurrent(ctx context.Context, log zerolog.Logg
 func (w *Worker) resolveScanConfig(scanType string, targetURL string, jobID string) (string, []string) {
 	switch scanType {
 	case "zap":
+		// ── ZAP ACTIVE SCAN ──────────────────────────────────────────────────
+		// zap-full-scan.py = Spider + Active Scan (phát hiện SQLi, XSS, etc.)
+		// zap-baseline.py  = Passive Scan only           → KHÔNG dùng vì bỏ lỡ lỗi active
+		//
+		// Flags:
+		//   -t  : target URL
+		//   -J  : JSON report file (ghi vào /zap/wrk/<filename>)
+		//   -m  : Spider max duration (phút). 3 phút để đủ thu thập URL.
+		//   -T  : Active Scan timeout (phút). 10 phút hard-cap.
+		//   -z  : ZAP daemon config overrides.
 		return "ghcr.io/zaproxy/zaproxy:stable", []string{
-			"zap-baseline.py",
+			"zap-full-scan.py",
 			"-t", targetURL,
 			"-J", fmt.Sprintf("report_%s.json", jobID),
-			// ── RATELIMIT ZAP: Max 2 min spider, max 2 concurrent thread per host ──
-			"-z", "-config spider.maxDuration=2 -config scanner.threadPerHost=2",
+			// ── RATELIMIT ZAP: Spider 3 phút, Active Scan 10 phút, 2 thread/host ──
+			"-m", "3",
+			"-T", "10",
+			"-z", "-config scanner.threadPerHost=2",
 		}
 
 	case "nmap":
+		// ── NMAP SERVICE SCAN ─────────────────────────────────────────────────
+		// Flags:
+		//   -T3          : Polite timing (không gây DoS)
+		//   --max-rate   : Tối đa 100 packets/sec
+		//   -sV          : Service/version detection
+		//   --script=vuln: Chạy NSE vuln scripts (phát hiện CVE)
+		//   -oX -        : Output XML ra stdout (được capture bởi DockerManager)
 		return "instrumentisto/nmap:latest", []string{
 			"-T3",               // ── RATELIMIT NMAP: Polite/Normal speed
 			"--max-rate", "100", // ── RATELIMIT NMAP: Max 100 packets/sec
@@ -406,13 +451,16 @@ func (w *Worker) resolveScanConfig(scanType string, targetURL string, jobID stri
 		}
 
 	case "full":
-		// 'full' execution logic is now handled uniquely inside processMessage via executeFullScanConcurrent
-		// We should normally not reach here if caller routes properly. Fallback to ZAP config just in case.
+		// 'full' execution logic is now handled via executeFullScanConcurrent.
+		// This case should NOT be reached under normal operation.
+		// Fallback sử dụng ZAP full-scan config.
 		return "ghcr.io/zaproxy/zaproxy:stable", []string{
-			"zap-baseline.py",
+			"zap-full-scan.py",
 			"-t", targetURL,
 			"-J", fmt.Sprintf("report_%s.json", jobID),
-			"-z", "-config spider.maxDuration=2 -config scanner.threadPerHost=2",
+			"-m", "3",
+			"-T", "10",
+			"-z", "-config scanner.threadPerHost=2",
 		}
 
 	default:
