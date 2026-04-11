@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -434,20 +435,28 @@ func (w *Worker) resolveScanConfig(scanType string, targetURL string, jobID stri
 		}
 
 	case "nmap":
-		// ── NMAP SERVICE SCAN ─────────────────────────────────────────────────
+		// ── NMAP TCP CONNECT SCAN ──────────────────────────────────────────────
+		// extractNmapTarget() loại bỏ scheme http/https trước khi pass cho Nmap.
+		// Nmap chỉ nhận hostname/IP, không hiểu URL format.
+		//
 		// Flags:
-		//   -T3          : Polite timing (không gây DoS)
-		//   --max-rate   : Tối đa 100 packets/sec
-		//   -sV          : Service/version detection
-		//   --script=vuln: Chạy NSE vuln scripts (phát hiện CVE)
+		//   -sT          : TCP Connect scan — không cần raw socket
+		//                  Azure NSG block raw SYN packets (-sS/-sV) vì chúng
+		//                  dùng raw socket. -sT dùng full 3-way handshake qua OS TCP stack.
+		//   -Pn          : Bỏ qua ping probe (Azure block ICMP → target luôn bị mark "down")
+		//   -T3          : Normal timing (không gây DoS)
+		//   --max-rate   : Tối đa 200 packets/sec
+		//   --top-ports  : Quét 1000 port phổ biến nhất (bao gồm 22, 80, 443, 3306...)
 		//   -oX -        : Output XML ra stdout (được capture bởi DockerManager)
+		nmapHost := extractNmapTarget(targetURL)
 		return "instrumentisto/nmap:latest", []string{
-			"-T3",               // ── RATELIMIT NMAP: Polite/Normal speed
-			"--max-rate", "100", // ── RATELIMIT NMAP: Max 100 packets/sec
-			"-sV",               // Service version detection
-			"--script=vuln",     // Run vulnerability scripts
-			"-oX", "-",          // Output XML to stdout
-			targetURL,
+			"-sT",             // TCP Connect — vượt Azure NSG
+			"-Pn",             // Skip ping — Azure block ICMP
+			"-T3",             // Normal timing
+			"--max-rate", "200",
+			"--top-ports", "1000", // Top 1000 ports (port 22, 80 nằm trong này)
+			"-oX", "-",        // XML output to stdout
+			nmapHost,
 		}
 
 	case "full":
@@ -470,4 +479,21 @@ func (w *Worker) resolveScanConfig(scanType string, targetURL string, jobID stri
 			fmt.Sprintf(`echo '{"scan_type":"mock","target":"%s","vulnerabilities":[]}'`, targetURL),
 		}
 	}
+}
+
+// extractNmapTarget strips the URL scheme (http://, https://) from a target URL
+// so it can be passed directly to Nmap as a hostname.
+//
+// Examples:
+//
+//	"http://scanme.nmap.org"  → "scanme.nmap.org"
+//	"https://example.com:443" → "example.com:443"
+//	"scanme.nmap.org"         → "scanme.nmap.org"  (no-op)
+func extractNmapTarget(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		// Not a valid URL — return as-is (may already be a hostname)
+		return strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
+	}
+	return parsed.Host
 }

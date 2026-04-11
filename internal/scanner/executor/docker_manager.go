@@ -19,7 +19,9 @@ import (
 const (
 	// DefaultScanTimeout is the maximum allowed runtime for a scan container.
 	// If exceeded, the container is killed and the job is marked FAILED.
-	DefaultScanTimeout = 15 * time.Minute
+	//
+	// 45 phút: ZAP full-scan = pull image (~2') + spider (~3') + active scan (~10') + margin 30'
+	DefaultScanTimeout = 45 * time.Minute
 
 	// containerStopTimeout is the grace period before Docker forcefully kills the container.
 	containerStopTimeout = 10 // seconds
