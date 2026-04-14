@@ -73,24 +73,59 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 		return
 	}
 
-	// Update DB
-	res, err := h.db.ExecContext(c.Request.Context(), `UPDATE users SET is_verified = TRUE WHERE email = $1`, req.Email)
+	// [THAY ĐỔI LOGIC]: 2. Lấy thông tin user hiện tại ra để Set Token
+	var user userRow
+	err = h.db.QueryRowContext(c.Request.Context(),
+		`SELECT id, email, username, role, is_active, is_verified, auth_provider FROM users WHERE email = $1`,
+		req.Email,
+	).Scan(&user.ID, &user.Email, &user.Username, &user.Role, &user.IsActive, &user.IsVerified, &user.AuthProvider)
+
 	if err != nil {
-		h.logger.Error().Err(err).Msg("failed to verify user in db")
-		response.InternalError(c, "verification failed")
+		response.InternalError(c, "verification failed: user not found")
 		return
 	}
 
-	rowsAffected, _ := res.RowsAffected()
-	if rowsAffected == 0 {
-		response.BadRequest(c, "user not found")
+	if !user.IsActive {
+		response.Forbidden(c, "account is deactivated")
 		return
 	}
 
-	// Delete from Redis
+	// [THAY ĐỔI LOGIC]: 3. Update trạng thái is_verified nếu login lần đầu (từ file Register)
+	if !user.IsVerified {
+		_, err := h.db.ExecContext(c.Request.Context(), `UPDATE users SET is_verified = TRUE WHERE id = $1`, user.ID)
+		if err != nil {
+			h.logger.Error().Err(err).Msg("failed to verify user in db")
+			response.InternalError(c, "verification failed")
+			return
+		}
+	}
+
+	// [THAY ĐỔI LOGIC]: 4. Chắc chắn XÓA key OTP trong Redis để không tái sử dụng
 	h.redis.Del(context.Background(), cacheKey)
 
-	response.Success(c, "email verified successfully. you can now log in.", nil)
+	// [THAY ĐỔI LOGIC]: 5. Sinh JWT Token (RS256) ngay tại hàm Verify này
+	token, err := h.generateToken(user)
+	if err != nil {
+		h.logger.Error().Err(err).Str("user_id", user.ID).Msg("failed to generate JWT")
+		response.InternalError(c, "failed to generate token")
+		return
+	}
+
+	// [THAY ĐỔI LOGIC]: 6. Gắn HttpOnly Cookie - Chìa khóa vàng của Security
+	secure := true
+	if strings.Contains(h.frontendURL, "localhost") {
+		secure = false // Cho phép http lỏng lẻo ở localhost
+	}
+	maxAge := int(h.jwtCfg.Expiration.Seconds())
+	c.SetCookie("nexussec_token", token, maxAge, "/", "", secure, true)
+
+	// Trả về HTTP 200 cho Client redirect
+	response.Success(c, "Xác thực OTP thành công", map[string]interface{}{
+		"id":       user.ID,
+		"email":    user.Email,
+		"username": user.Username,
+		"role":     user.Role,
+	})
 }
 
 // ── OAuth Configurations ─────────────────────────────────────

@@ -1,169 +1,160 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { fetchApi } from "@/lib/api";
-import { Loader2, AlertCircle, CheckCircle, Mail, KeyRound } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-export default function VerifyEmailPage() {
+function VerifyEmailForm() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const email = searchParams.get("email") || "";
+
+    const [otp, setOtp] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        if (otp.length !== 6) {
+            setError("OTP phải đủ 6 chữ số.");
+            return;
+        }
         setError(null);
         setLoading(true);
-
-        const formData = new FormData(e.currentTarget);
-        const email = formData.get("email") as string;
-        const otp = formData.get("otp") as string;
-
         try {
             await fetchApi("/auth/verify-email", {
                 method: "POST",
                 body: JSON.stringify({ email, otp }),
             });
-            setSuccess(true);
+            window.location.href = "/dashboard";
         } catch (err: any) {
-            setError(err.message || "Invalid OTP code");
-        } finally {
+            setError(err.message || "OTP không hợp lệ. Vui lòng thử lại.");
             setLoading(false);
         }
     };
 
-    if (success) {
-        return (
-            <div className="animate-in fade-in zoom-in-95 duration-500 py-8 text-center space-y-6">
-                <div
-                    className="mx-auto w-20 h-20 rounded-2xl flex items-center justify-center mb-2"
-                    style={{
-                        background: "radial-gradient(circle at 50% 30%, rgba(16,185,129,0.25), rgba(16,185,129,0.05))",
-                        border: "1px solid rgba(16,185,129,0.35)",
-                        boxShadow: "0 0 40px rgba(16,185,129,0.2)",
-                    }}
-                >
-                    <CheckCircle className="w-9 h-9 text-emerald-400" />
-                </div>
-                <div>
-                    <h2 className="text-2xl font-bold text-white">Email Verified!</h2>
-                    <p className="text-sm text-slate-400 mt-2 max-w-xs mx-auto leading-relaxed">
-                        Your account is now secure. Welcome to NexusSec.
-                    </p>
-                </div>
-                <Link
-                    href="/login"
-                    className="inline-flex items-center justify-center h-11 px-8 rounded-xl text-sm font-semibold text-white transition-all"
-                    style={{
-                        background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
-                        boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 4px 24px rgba(99,102,241,0.3)",
-                    }}
-                >
-                    Go to Login
-                </Link>
-            </div>
-        );
-    }
-
     return (
-        <div className="space-y-7">
-            {/* Header */}
-            <div className="space-y-1">
-                <div className="flex items-center gap-2 mb-4">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/25">
-                        <Mail className="h-4 w-4 text-indigo-400" />
-                    </div>
-                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-indigo-400">
-                        Authentication
-                    </span>
-                </div>
-                <h2 className="text-2xl font-bold tracking-tight text-white">Check your email</h2>
-                <p className="text-sm text-slate-400">
-                    We've sent a 6-digit code to your email. Enter it below to verify your account.
+        <div className="space-y-8">
+            {/* Heading */}
+            <div>
+                <h2
+                    className="text-3xl font-bold text-white"
+                    style={{ letterSpacing: "-0.03em", lineHeight: 1.15 }}
+                >
+                    Check your email
+                </h2>
+                <p className="mt-2 text-[15px] text-slate-400" style={{ fontWeight: 400 }}>
+                    We sent a 6-digit code to{" "}
+                    <span className="text-slate-300 font-medium">{email || "your inbox"}</span>.
                 </p>
             </div>
 
             {/* Error */}
             {error && (
-                <div className="flex items-start gap-3 p-3.5 bg-red-500/8 border border-red-500/20 text-red-400 rounded-xl text-sm">
-                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                    <p>{error}</p>
+                <div
+                    className="px-4 py-3 rounded-xl text-sm text-red-400"
+                    style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
+                >
+                    {error}
                 </div>
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Email */}
-                <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                        Email address
+            <form onSubmit={handleSubmit} className="space-y-6">
+                {/* OTP input — large, monospaced */}
+                <div>
+                    <label className="block text-[13px] font-medium text-slate-400 mb-3">
+                        Verification code
                     </label>
-                    <div className="relative">
-                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                        <input
-                            required
-                            type="email"
-                            name="email"
-                            id="verify-email"
-                            placeholder="you@company.com"
-                            className="w-full h-11 pl-10 pr-4 rounded-xl border border-white/8 bg-white/4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/60 focus:bg-white/6 focus:ring-1 focus:ring-indigo-500/30 transition-all duration-200"
-                        />
-                    </div>
-                </div>
+                    <input
+                        required
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={otp}
+                        onChange={e => setOtp(e.target.value.replace(/\D/g, ""))}
+                        placeholder="000000"
+                        className="w-full h-14 rounded-xl text-white text-center text-2xl transition-all duration-200 outline-none"
+                        style={{
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.09)",
+                            letterSpacing: "0.5em",
+                            fontFamily: "var(--font-mono)",
+                        }}
+                        onFocus={e => {
+                            e.currentTarget.style.border = "1px solid rgba(99,102,241,0.5)";
+                            e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                            e.currentTarget.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.12)";
+                        }}
+                        onBlur={e => {
+                            e.currentTarget.style.border = "1px solid rgba(255,255,255,0.09)";
+                            e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                            e.currentTarget.style.boxShadow = "none";
+                        }}
+                    />
 
-                {/* OTP */}
-                <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                        One-Time Password (6 digits)
-                    </label>
-                    <div className="relative">
-                        <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                        <input
-                            required
-                            type="text"
-                            name="otp"
-                            id="verify-otp"
-                            placeholder="123456"
-                            maxLength={6}
-                            minLength={6}
-                            pattern="\d{6}"
-                            title="Please enter a 6-digit code"
-                            className="w-full h-11 pl-10 pr-4 rounded-xl border border-white/8 bg-white/4 font-mono text-center tracking-[0.5em] text-white placeholder:text-slate-600 placeholder:tracking-normal focus:outline-none focus:border-indigo-500/60 focus:bg-white/6 focus:ring-1 focus:ring-indigo-500/30 transition-all duration-200"
-                        />
+                    {/* Progress dots */}
+                    <div className="flex gap-2 justify-center mt-3">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div
+                                key={i}
+                                className="rounded-full transition-all duration-150"
+                                style={{
+                                    width: 6,
+                                    height: 6,
+                                    background: i < otp.length
+                                        ? "rgba(99,102,241,0.9)"
+                                        : "rgba(255,255,255,0.1)",
+                                    transform: i < otp.length ? "scale(1.2)" : "scale(1)",
+                                }}
+                            />
+                        ))}
                     </div>
                 </div>
 
                 {/* Submit */}
                 <button
-                    disabled={loading}
                     type="submit"
-                    className="relative w-full h-11 mt-2 rounded-xl text-sm font-semibold text-white overflow-hidden group transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={loading || otp.length !== 6 || !email}
+                    className="w-full h-11 rounded-xl text-[15px] font-semibold text-white transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
-                        background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
-                        boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 4px 24px rgba(99,102,241,0.3)",
+                        background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                        boxShadow: "0 1px 0 0 rgba(255,255,255,0.12) inset, 0 4px 20px rgba(99,102,241,0.3)",
+                    }}
+                    onMouseEnter={e => {
+                        if (!loading) (e.currentTarget as HTMLElement).style.boxShadow = "0 1px 0 0 rgba(255,255,255,0.12) inset, 0 6px 28px rgba(99,102,241,0.45)";
+                    }}
+                    onMouseLeave={e => {
+                        (e.currentTarget as HTMLElement).style.boxShadow = "0 1px 0 0 rgba(255,255,255,0.12) inset, 0 4px 20px rgba(99,102,241,0.3)";
                     }}
                 >
-                    <span
-                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                        style={{ background: "linear-gradient(135deg, #818cf8 0%, #6366f1 100%)" }}
-                    />
-                    <span className="relative flex items-center justify-center gap-2">
+                    <span className="flex items-center justify-center gap-2">
                         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                        {loading ? "Verifying…" : "Verify Account"}
+                        {loading ? "Verifying…" : "Verify & continue"}
                     </span>
                 </button>
             </form>
 
-            {/* Footer */}
-            <div className="pt-1 text-center text-sm text-slate-500">
-                Wrong email or didn't receive code?{" "}
-                <Link
-                    href="/register"
-                    className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
-                    Sign up again
-                </Link>
-            </div>
+            {/* Info */}
+            <p className="text-center text-[13px] text-slate-600">
+                Didn't receive a code?{" "}
+                <button className="text-indigo-400 hover:text-indigo-300 transition-colors font-medium">
+                    Resend email
+                </button>
+            </p>
         </div>
+    );
+}
+
+export default function VerifyEmailPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex justify-center py-12">
+                <Loader2 className="w-7 h-7 animate-spin text-indigo-500" />
+            </div>
+        }>
+            <VerifyEmailForm />
+        </Suspense>
     );
 }

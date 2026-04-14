@@ -236,23 +236,39 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT (RS256 signed with private key)
-	token, err := h.generateToken(user)
+	// --- [THAY ĐỔI LOGIC]: BỎ TẠO JWT TOKEN ---
+	// THAY VÀO ĐÓ, TA SINH OTP ĐỂ ÉP USER QUA BƯỚC 2
+	
+	// Generate 6-digit OTP
+	otp := fmt.Sprintf("%06d", rand.Intn(1000000))
+	
+	// Lưu OTP vào Redis (ttl = 15m)
+	cacheKey := fmt.Sprintf("nexussec:email_verify:%s", user.Email)
+	err = h.redis.Set(context.Background(), cacheKey, otp, 15*time.Minute).Err()
 	if err != nil {
-		h.logger.Error().Err(err).Str("user_id", user.ID).Msg("failed to generate JWT")
-		response.InternalError(c, "failed to generate token")
+		h.logger.Error().Err(err).Msg("failed to save OTP to redis")
+		response.InternalError(c, "failed to process login")
 		return
 	}
+
+	// [THAY ĐỔI LOGIC]: Chạy Goroutine đẩy push Mail (Có bọc Recover chống crash)
+	go func(to, name, code string) {
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error().Msgf("Recovered from panic in sendVerificationEmail: %v", r)
+			}
+		}()
+		h.sendVerificationEmail(to, name, code)
+	}(user.Email, user.Username, otp)
 
 	h.logger.Info().
 		Str("user_id", user.ID).
 		Str("email", user.Email).
-		Msg("user logged in successfully")
+		Msg("password verified, sending OTP for 2FA login")
 
-	response.Success(c, "login successful", authResponse{
-		AccessToken: token,
-		TokenType:   "Bearer",
-		ExpiresIn:   int64(h.jwtCfg.Expiration.Seconds()),
+	// [THAY ĐỔI LOGIC]: Trả về JSON HTTP 200 báo hiệu mớm State cho Client
+	response.Success(c, "Vui lòng kiểm tra email để lấy mã OTP đăng nhập", map[string]string{
+		"email": user.Email,
 	})
 }
 
