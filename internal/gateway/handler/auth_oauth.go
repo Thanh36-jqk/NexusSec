@@ -274,10 +274,10 @@ func (h *AuthHandler) processOAuthLogin(c *gin.Context, email, rawName, provider
 	// 1. Check if user exists
 	var user userRow
 	err := h.db.QueryRowContext(c.Request.Context(),
-		`SELECT id, email, username, password, role, is_active, is_verified, auth_provider
+		`SELECT id, email, username, password, role, is_active, is_verified, auth_provider, provider_id
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&user.ID, &user.Email, &user.Username, &user.Password, &user.Role, &user.IsActive, &user.IsVerified, &user.AuthProvider)
+	).Scan(&user.ID, &user.Email, &user.Username, &user.Password, &user.Role, &user.IsActive, &user.IsVerified, &user.AuthProvider, &user.ProviderID)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -316,12 +316,13 @@ func (h *AuthHandler) processOAuthLogin(c *gin.Context, email, rawName, provider
 		// User exists. Account Linking: Update provider ID if missing (or even if local, they just logged in with social)
 		if user.AuthProvider == "local" || user.ProviderID == nil {
 			if !user.IsVerified {
-				// Alice registered locally but didn't verify OTP. Bob mapped Alice's email to his GitHub account to steal it.
-				// BLOCK linking because local owner hasn't proven ownership of that email yet!
-				c.Redirect(http.StatusTemporaryRedirect, h.frontendURL+"/login?error=account_not_verified_for_linking")
-				return
+				// Prevent Denial of Service: someone registered this email locally but never verified it.
+				// Since OAuth login guarantees email ownership (GitHub/Google verified),
+				// we securely hijack this unverified row for the true owner and wipe the malicious password.
+				h.db.ExecContext(c.Request.Context(), `UPDATE users SET auth_provider = $1, provider_id = $2, is_verified = true, password = NULL WHERE id = $3`, provider, providerID, user.ID)
+			} else {
+				h.db.ExecContext(c.Request.Context(), `UPDATE users SET auth_provider = $1, provider_id = $2, is_verified = true WHERE id = $3`, provider, providerID, user.ID)
 			}
-			h.db.ExecContext(c.Request.Context(), `UPDATE users SET auth_provider = $1, provider_id = $2, is_verified = true WHERE id = $3`, provider, providerID, user.ID)
 		}
 	}
 
