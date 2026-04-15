@@ -39,7 +39,13 @@ func NewNotifier(
 // MarkRunning transitions the scan job to RUNNING status.
 func (n *Notifier) MarkRunning(ctx context.Context, jobID string) error {
 	n.logger.Info().Str("job_id", jobID).Msg("job status → RUNNING")
-	return n.jobRepo.UpdateStatus(ctx, jobID, enum.ScanStatusRunning)
+	err := n.jobRepo.UpdateStatus(ctx, jobID, enum.ScanStatusRunning)
+	if n.redisClient != nil && err == nil {
+		channel := "scan_progress:" + jobID
+		payload := `{"type":"scan_started","status":"running","progress":0}`
+		n.redisClient.Publish(ctx, channel, payload)
+	}
+	return err
 }
 
 // MarkCompleted stores the report in MongoDB and transitions the job to COMPLETED.
