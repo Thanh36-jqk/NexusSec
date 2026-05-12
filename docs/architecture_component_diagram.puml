@@ -1,0 +1,428 @@
+@startuml NexusSec_Microservices_Security_Gateway
+
+' ============================================================================
+' NexusSec — Microservices Security Gateway Architecture
+' Component Diagram (Proof-of-Concept Deployment)
+' ============================================================================
+
+' --- Global Skin Parameters ------------------------------------------------
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam roundCorner 12
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 70
+
+' --- Component Styling -----------------------------------------------------
+skinparam component {
+    BackgroundColor #FFFFFF
+    BorderColor #4A5568
+    BorderThickness 1.5
+    FontColor #1A202C
+    FontStyle bold
+    ArrowColor #4A5568
+}
+
+' --- Rectangle / Container Styling -----------------------------------------
+skinparam rectangle {
+    BackgroundColor #F7FAFC
+    BorderColor #CBD5E0
+    BorderThickness 1.5
+    FontColor #2D3748
+    FontStyle bold
+    RoundCorner 14
+}
+
+' --- Database Styling ------------------------------------------------------
+skinparam database {    
+    BackgroundColor #FFFFFF
+    BorderColor #4A5568
+    BorderThickness 1.5
+    FontColor #1A202C
+    FontStyle bold
+}
+
+' --- Queue Styling ---------------------------------------------------------
+skinparam queue {
+    BackgroundColor #FFFFFF
+    BorderColor #4A5568
+    BorderThickness 1.5
+    FontColor #1A202C
+    FontStyle bold
+}
+
+' --- Actor Styling ---------------------------------------------------------
+skinparam actor {
+    BackgroundColor #4299E1
+    BorderColor #2B6CB0
+    FontColor #1A202C
+    FontStyle bold
+}
+
+' --- Arrow / Note Styling --------------------------------------------------
+skinparam arrow {
+    Color #4A5568
+    FontColor #718096
+    FontSize 11
+    Thickness 1.5
+}
+
+skinparam note {
+    BackgroundColor #FFFFF0
+    BorderColor #D69E2E
+    FontColor #744210
+    FontSize 10
+}
+
+' ============================================================================
+'  LAYOUT
+' ============================================================================
+
+title <size:18><b>NexusSec — Microservices Security Gateway</b></size>\n<size:12><color:#718096>Component Diagram · Proof-of-Concept Deployment</color></size>
+
+' --- External Actor --------------------------------------------------------
+actor "User Client\n(Web / Mobile)" as client <<actor>>
+
+' === GATEWAY TIER ==========================================================
+rectangle "**Gateway Tier**\n<size:10><color:#718096>Edge & Routing Layer</color></size>" as gateway_tier #EBF8FF {
+
+    component "**Nginx**\nReverse Proxy" as nginx <<component>> #BEE3F8 {
+    }
+    note right of nginx
+        • TLS termination
+        • Rate limiting
+        • Static asset serving
+        • Load balancing
+    end note
+
+    component "**Go API Gateway**\n//NexusSec Core//" as api_gw <<service>> #BEE3F8 {
+    }
+    note right of api_gw
+        • JWT authentication
+        • OAuth 2.0 flows
+        • Request validation
+        • Scan orchestration
+        • WebSocket notifications
+    end note
+}
+
+' === INFRASTRUCTURE TIER ===================================================
+rectangle "**Infrastructure Tier**\n<size:10><color:#718096>Data & Messaging Layer</color></size>" as infra_tier #FEFCBF {
+
+    database "**PostgreSQL**\nPersistent Storage" as postgres <<database>> #FED7D7 {
+    }
+    note bottom of postgres
+        • User accounts & sessions
+        • Scan results & reports
+        • RBAC policies
+    end note
+
+    database "**Redis**\nCache / Session Store" as redis <<database>> #C6F6D5 {
+    }
+    note bottom of redis
+        • Session caching
+        • Rate-limit counters
+        • Pub/Sub channels
+    end note
+
+    queue "**RabbitMQ**\nMessage Queue" as rabbitmq <<queue>> #E9D8FD {
+    }
+    note bottom of rabbitmq
+        • Async scan jobs
+        • Event-driven notifications
+        • Dead-letter handling
+    end note
+}
+
+' ============================================================================
+'  RELATIONSHIPS
+' ============================================================================
+
+' --- Client → Gateway Tier -------------------------------------------------
+client -[#2B6CB0,bold]down-> nginx : <color:#2B6CB0><b>HTTPS (TLS 1.3)</b></color>
+
+' --- Nginx → API Gateway ---------------------------------------------------
+nginx -[#2B6CB0,bold]down-> api_gw : <color:#2B6CB0><b>HTTP / Proxy Pass</b></color>
+
+' --- API Gateway → Infrastructure ------------------------------------------
+api_gw -[#38A169,bold]down-> redis   : <color:#38A169><b>TCP/IP\nSync Read/Write</b></color>
+api_gw -[#805AD5,bold]down-> rabbitmq : <color:#805AD5><b>AMQP 0-9-1\nAsync Publish/Consume</b></color>
+api_gw -[#E53E3E,bold]down-> postgres : <color:#E53E3E><b>TCP/IP (port 5432)\nSQL Read/Write</b></color>
+
+' ============================================================================
+'  FOOTER
+' ============================================================================
+
+legend right
+    |<#BEE3F8>  | Gateway Tier |
+    |<#C6F6D5>  | Cache Layer |
+    |<#E9D8FD>  | Messaging Layer |
+    |<#FED7D7>  | Persistence Layer |
+end legend
+
+footer <size:10><color:#A0AEC0>NexusSec Architecture · Generated %date("yyyy-MM-dd") · Proof-of-Concept</color></size>
+
+@enduml
+
+' ############################################################################
+' ############################################################################
+'
+'   NexusSec — Vulnerability Scan Async Data Flow
+'   Sequence Diagram  ·  Senior Systems Architect View
+'   Lifeline activate/deactivate · Tier-aware box groups · autonumber
+'
+' ############################################################################
+' ############################################################################
+
+@startuml NexusSec_Scan_Sequence_v2
+
+' ============================================================================
+'  GLOBAL SKIN PARAMETERS
+' ============================================================================
+skinparam backgroundColor       #F8FAFC
+skinparam defaultFontName       "Segoe UI"
+skinparam defaultFontSize       12
+skinparam shadowing             false
+skinparam sequenceMessageAlign  center
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize        150
+
+' ============================================================================
+'  PARTICIPANT SKIN
+' ============================================================================
+skinparam participant {
+    BackgroundColor     #FFFFFF
+    BorderColor         #4A5568
+    BorderThickness     2
+    FontColor           #1A202C
+    FontStyle           bold
+    StereotypeFontColor #718096
+    StereotypeFontSize  9
+}
+
+skinparam actor {
+    BackgroundColor #3B82F6
+    BorderColor     #1D4ED8
+    FontColor       #FFFFFF
+    FontStyle       bold
+}
+
+' ============================================================================
+'  SEQUENCE-SPECIFIC SKIN
+' ============================================================================
+skinparam sequence {
+    ' Arrows
+    ArrowColor              #334155
+    ArrowFontColor          #334155
+    ArrowFontSize           10
+    ArrowThickness          1.8
+
+    ' Lifelines
+    LifeLineBorderColor     #94A3B8
+    LifeLineBorderThickness 1.5
+    LifeLineBackgroundColor #E2E8F0
+
+    ' Activation bars
+    LifeLineStrategy noactivation
+
+    ' group / alt / loop blocks
+    GroupBorderColor        #1E293B
+    GroupBorderThickness    2
+    GroupFontStyle          bold
+    GroupFontSize           12
+    GroupFontColor          #F8FAFC
+    GroupBackgroundColor    #1E293B99
+
+    ' == dividers ==
+    DividerBorderColor      #94A3B8
+    DividerBackgroundColor  #E2E8F0
+    DividerFontColor        #1E293B
+    DividerFontStyle        bold
+    DividerFontSize         12
+
+    ' box labels
+    BoxBorderColor          #CBD5E1
+    BoxFontStyle            bold
+    BoxFontSize             11
+    BoxBackgroundColor      #F1F5F9
+
+    ' Notes
+    NoteBackgroundColor     #FEFCE8
+    NoteBorderColor         #EAB308
+    NoteFontColor           #713F12
+    NoteFontSize            10
+}
+
+' ============================================================================
+'  TITLE
+' ============================================================================
+title <size:22><b>NexusSec — Async Vulnerability Scan Data Flow</b></size>\n<size:12><color:#64748B>Sequence Diagram · POST /api/v1/scans · Sync + Async Phases · With Lifeline Activation</color></size>
+
+' ============================================================================
+'  AUTONUMBER
+' ============================================================================
+autonumber "<b>( 0 )</b>"
+
+' ============================================================================
+'  PARTICIPANTS — 4 tier-aware boxes
+' ============================================================================
+
+box "  External  " #DBEAFE
+    actor "Client" as client
+end box
+
+box "  Gateway Tier (DMZ)  " #FEE2E2
+    participant "**Nginx**\n<size:9><color:#64748B>Reverse Proxy · TLS</color></size>"     as nginx  #FCA5A5
+    participant "**GoAPI_Gateway**\n<size:9><color:#64748B>Core Logic · JWT · Rate Limit</color></size>" as api #F87171
+end box
+
+box "  Data & Message Tier  " #DCFCE7
+    participant "**Redis**\n<size:9><color:#64748B>Cache · Rate Counters</color></size>"   as redis  #86EFAC
+    participant "**PostgreSQL**\n<size:9><color:#64748B>RDBMS · Scan Jobs</color></size>"  as pg     #6EE7B7
+    participant "**RabbitMQ**\n<size:9><color:#64748B>AMQP Broker</color></size>"           as mq     #A7F3D0
+end box
+
+box "  Worker Tier  " #EDE9FE
+    participant "**Go_Worker**\n<size:9><color:#64748B>Scanner Engine · Goroutine</color></size>" as worker #C4B5FD
+    participant "**MongoDB**\n<size:9><color:#64748B>NoSQL · JSON Reports</color></size>"          as mongo  #A78BFA
+end box
+
+' ============================================================================
+'  ①  SYNCHRONOUS PHASE
+' ============================================================================
+
+== <color:#1E293B>①  Synchronous Phase — HTTP Request, Validation & Job Dispatch</color> ==
+
+client  ->  nginx  : <b>POST /api/v1/scans</b>\n<color:#64748B>HTTPS TLS 1.3 · { target_id, scan_type }</color>
+activate nginx #FCA5A5
+
+nginx   ->  api    : <b>HTTP proxy_pass :8080</b>\n<color:#64748B>Forward headers · Strip TLS</color>
+activate api #F87171
+
+' ── Rate Limit ──────────────────────────────────────────────────────────────
+api     ->  redis  : <b>INCR rate:{user_id}</b>\n<color:#64748B>Sliding-window · TTL = 60 s · RESP protocol</color>
+activate redis #86EFAC
+redis   --> api    : <b>counter = N</b>
+deactivate redis
+
+alt <color:#DC2626><b>N > 60  →  Rate limit exceeded</b></color>
+    api     --> nginx  : <b>HTTP 429 Too Many Requests</b>
+    nginx   --> client : <b>429 · { "error": "rate_limit_exceeded",\n"retry_after": 60 }</b>
+    deactivate api
+    deactivate nginx
+
+    note right of client
+        ⛔ Request rejected.
+        Client must honour
+        **Retry-After: 60** header.
+    end note
+
+else <color:#16A34A><b>N ≤ 60  →  Proceed</b></color>
+
+    ' ── JWT Validation ──────────────────────────────────────────────────────
+    api     ->  api    : <b>Validate JWT Bearer Token</b>\n<color:#64748B>HMAC-SHA256 sig · exp / iss / sub claims</color>
+
+    alt <color:#DC2626><b>Token invalid or expired</b></color>
+        api     --> nginx  : <b>HTTP 401 Unauthorized</b>
+        nginx   --> client : <b>401 · { "error": "invalid_token" }</b>
+        deactivate api
+        deactivate nginx
+
+    else <color:#16A34A><b>Token valid</b></color>
+
+        ' ── Persist Scan Job ────────────────────────────────────────────────
+        api     ->  pg     : <b>INSERT INTO scan_jobs</b>\n<color:#64748B>status='pending', progress=0\nuser_id, target_id, scan_type</color>
+        activate pg #6EE7B7
+        pg      --> api    : <b>job_id: UUID</b>\n<color:#64748B>Row committed · port 5432</color>
+        deactivate pg
+
+        ' ── Publish to RabbitMQ ─────────────────────────────────────────────
+        api     ->  mq     : <b>BasicPublish</b>\n<color:#64748B>AMQP 0-9-1 · Exchange: scan.tasks\nRouting key: scan.new\n{ job_id, target_id, scan_type, base_url }</color>
+        activate mq #A7F3D0
+        mq      --> api    : <b>PublishConfirm ACK</b>\n<color:#64748B>Publisher-confirm mode · durable queue</color>
+        deactivate mq
+
+        ' ── 202 Accepted ────────────────────────────────────────────────────
+        api     --> nginx  : <b>HTTP 202 Accepted</b>\n<color:#64748B>{ "job_id": "{uuid}", "status": "pending" }</color>
+        deactivate api
+
+        nginx   --> client : <b>202 Accepted ✓</b>\n<color:#64748B>Response delivered to caller</color>
+        deactivate nginx
+
+        note right of client
+            ✅ **job_id** received instantly.
+            Client polls:
+            GET /api/v1/scans/{job_id}
+            or listens via WebSocket
+            for real-time progress events.
+        end note
+
+    end
+end
+
+' ============================================================================
+'  ②  ASYNCHRONOUS PHASE
+' ============================================================================
+
+== <color:#1E293B>②  Asynchronous Phase — Background Processing (Decoupled from HTTP Lifecycle)</color> ==
+
+group <color:#F8FAFC><b>Async Background Job</b></color> [Go_Worker · Independent goroutine · No open client connection]
+
+    mq      ->  worker  : <b>BasicDeliver</b>\n<color:#64748B>AMQP 0-9-1 · Queue: scan.tasks\n{ job_id, target_id, scan_type, base_url }</color>
+    activate worker #C4B5FD
+
+    worker  ->  worker  : <b>SSRF Pre-flight Check</b>\n<color:#64748B>DNS resolve base_url\nBlock RFC-1918 / loopback ranges</color>
+
+    ' ── Mark Running ────────────────────────────────────────────────────────
+    worker  ->  pg      : <b>UPDATE scan_jobs</b>\n<color:#64748B>SET status='running', started_at=now()\nWHERE id = job_id</color>
+    activate pg #6EE7B7
+    pg      --> worker  : <b>OK · 1 row affected</b>
+    deactivate pg
+
+    note over worker
+        🔍 Scanner engine launched:
+        ZAP Active Scan / Nuclei templates
+        Probing endpoints for vulnerabilities.
+    end note
+
+    ' ── Scan Execution (progress loop) ──────────────────────────────────────
+    loop <color:#7C3AED><b>Scan checkpoint (progress: 0 % → 100 %)</b></color>
+        worker  ->  pg     : <b>UPDATE scan_jobs</b>\n<color:#64748B>SET progress = {N} WHERE id = job_id</color>
+        activate pg #6EE7B7
+        pg      --> worker : <b>OK</b>
+        deactivate pg
+    end
+
+    ' ── Persist Full Report → MongoDB ───────────────────────────────────────
+    worker  ->  mongo   : <b>insertOne()</b>\n<color:#64748B>Collection: vulnerability_reports\nMongoDB Wire Protocol · port 27017\nPayload: full ZAP / Nuclei JSON findings</color>
+    activate mongo #A78BFA
+    mongo   --> worker  : <b>report_id: ObjectId</b>\n<color:#64748B>Document persisted to disk</color>
+    deactivate mongo
+
+    ' ── Finalise Job in PostgreSQL ───────────────────────────────────────────
+    worker  ->  pg      : <b>UPDATE scan_jobs</b>\n<color:#64748B>SET status='completed',\n    report_id='{ObjectId}',\n    finished_at=now(),\n    progress=100\nWHERE id = job_id</color>
+    activate pg #6EE7B7
+    pg      --> worker  : <b>OK · 1 row affected</b>
+    deactivate pg
+
+    ' ── ACK message ─────────────────────────────────────────────────────────
+    worker  ->  mq      : <b>BasicAck (delivery-tag)</b>\n<color:#64748B>Message removed from queue permanently</color>
+    deactivate worker
+
+    note over worker, pg
+        ⚠️ **On failure:** worker sends **BasicNack**
+        → message routed to Dead-Letter Exchange
+        → job status set to **'failed'** in PostgreSQL
+        → error_msg column populated
+    end note
+
+end
+
+' ============================================================================
+'  FOOTER
+' ============================================================================
+footer <size:10><color:#94A3B8>NexusSec · Async Scan Data Flow · Generated %date("yyyy-MM-dd") · Sequence Diagram v2</color></size>
+
+@enduml
