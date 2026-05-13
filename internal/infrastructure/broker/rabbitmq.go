@@ -2,6 +2,7 @@ package broker
 
 import (
 	"fmt"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog"
@@ -15,6 +16,15 @@ const (
 	// DLQSuffix is appended to the source queue name to form the DLQ name.
 	// e.g., scan_jobs_queue → scan_jobs_queue.dlq
 	DLQSuffix = ".dlq"
+
+	// maxRetries is the maximum number of connection attempts before giving up.
+	maxRetries = 10
+
+	// initialRetryDelay is the wait time before the first retry.
+	initialRetryDelay = 2 * time.Second
+
+	// maxRetryDelay caps the exponential backoff to avoid waiting too long.
+	maxRetryDelay = 30 * time.Second
 )
 
 // Connection wraps an AMQP connection and channel with reconnection-friendly helpers.
@@ -25,25 +35,49 @@ type Connection struct {
 }
 
 // NewConnection establishes a connection to RabbitMQ and opens a channel.
+// It retries up to maxRetries times with exponential backoff to handle
+// the case where RabbitMQ is still starting up (common on Docker cold-start).
 func NewConnection(uri string, logger zerolog.Logger) (*Connection, error) {
-	conn, err := amqp.Dial(uri)
-	if err != nil {
-		return nil, fmt.Errorf("rabbitmq: failed to connect to %s: %w", uri, err)
+	delay := initialRetryDelay
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		conn, err := amqp.Dial(uri)
+		if err != nil {
+			if attempt == maxRetries {
+				return nil, fmt.Errorf("rabbitmq: failed to connect to %s after %d attempts: %w", uri, maxRetries, err)
+			}
+			logger.Warn().
+				Err(err).
+				Int("attempt", attempt).
+				Int("max_retries", maxRetries).
+				Dur("retry_in", delay).
+				Msg("rabbitmq: connection failed, retrying...")
+			time.Sleep(delay)
+			// Exponential backoff: double the delay each attempt, capped at maxRetryDelay
+			delay *= 2
+			if delay > maxRetryDelay {
+				delay = maxRetryDelay
+			}
+			continue
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("rabbitmq: failed to open channel: %w", err)
+		}
+
+		logger.Info().Int("attempt", attempt).Msg("connected to RabbitMQ")
+
+		return &Connection{
+			conn:    conn,
+			channel: ch,
+			logger:  logger,
+		}, nil
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("rabbitmq: failed to open channel: %w", err)
-	}
-
-	logger.Info().Msg("connected to RabbitMQ")
-
-	return &Connection{
-		conn:    conn,
-		channel: ch,
-		logger:  logger,
-	}, nil
+	// This line is unreachable but satisfies the compiler.
+	return nil, fmt.Errorf("rabbitmq: exhausted all %d connection attempts", maxRetries)
 }
 
 // Channel returns the underlying AMQP channel.
