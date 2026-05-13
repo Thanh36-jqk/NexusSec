@@ -257,9 +257,25 @@ func (w *Worker) executeSingleScan(ctx context.Context, log zerolog.Logger, deli
 	if err != nil {
 		log.Warn().Err(err).Msg("no parser available, storing empty report")
 	} else {
+		// Kiểm tra đặc biệt cho ZAP: nếu kết quả trả về bắt đầu bằng chữ 'E' (như 'ERROR', 'Exception')
+		// hoặc không bắt đầu bằng ký tự hợp lệ của JSON ({ hoặc [), có nghĩa là file report
+		// không được tạo ra, và stdout đang chứa log console của docker.
 		outStr := strings.TrimSpace(result.Stdout)
 		if outStr == "" {
-			errMsg := "scan produced empty output — target may be unreachable"
+			errMsg := "scan produced empty output — target may be unreachable or connection timed out"
+			log.Error().Msg(errMsg)
+			w.notifier.MarkFailed(ctx, msg.JobID, errMsg)
+			delivery.Ack(false)
+			return
+		}
+		
+		if msg.ScanType == "zap" && !strings.HasPrefix(outStr, "{") && !strings.HasPrefix(outStr, "[") {
+			// Đây là raw console log, không phải JSON
+			logSnippet := outStr
+			if len(logSnippet) > 200 {
+				logSnippet = logSnippet[:200] + "..."
+			}
+			errMsg := fmt.Sprintf("ZAP failed to generate JSON report. Container output: %s", logSnippet)
 			log.Error().Msg(errMsg)
 			w.notifier.MarkFailed(ctx, msg.JobID, errMsg)
 			delivery.Ack(false)
@@ -269,7 +285,7 @@ func (w *Worker) executeSingleScan(ctx context.Context, log zerolog.Logger, deli
 		vulns, err := p.Parse(strings.NewReader(outStr))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to parse scan output")
-			w.notifier.MarkFailed(ctx, msg.JobID, fmt.Sprintf("failed to parse scanner output: %v", err))
+			w.notifier.MarkFailed(ctx, msg.JobID, fmt.Sprintf("failed to parse scanner output (invalid JSON): %v", err))
 			delivery.Ack(false)
 			return
 		}
