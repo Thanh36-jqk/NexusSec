@@ -35,7 +35,19 @@ func (h *TriageHandler) targetFromScan(c *gin.Context, scanID string, userID str
 	return targetID, err
 }
 
-// GetTriageRules handles GET /scans/:id/triage
+// GetTriageRules retrieves all triage rules for a scan.
+//
+// @Summary      Get triage rules
+// @Description  Lấy danh sách triage rules của một scan (mà user sở hữu).
+// @Tags         triage
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Scan Job ID (UUID)"
+// @Success      200  {object}  response.JSONResponse  "Danh sách triage rules"
+// @Failure      401  {object}  response.JSONResponse
+// @Failure      404  {object}  response.JSONResponse  "Scan không tồn tại"
+// @Failure      500  {object}  response.JSONResponse
+// @Router       /scans/{id}/triage [get]
 func (h *TriageHandler) GetTriageRules(c *gin.Context) {
 	scanID := c.Param("id")
 
@@ -66,7 +78,23 @@ func (h *TriageHandler) GetTriageRules(c *gin.Context) {
 	response.Success(c, "triage rules fetched successfully", rules)
 }
 
-// UpsertTriageRule handles PUT /scans/:id/triage/:fingerprint
+// UpsertTriageRule creates or updates a triage rule for a vulnerability.
+//
+// @Summary      Upsert triage rule
+// @Description  Tạo hoặc cập nhật triage rule cho một lỗ hổng (theo fingerprint).
+// @Tags         triage
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id           path  string                     true  "Scan Job ID (UUID)"
+// @Param        fingerprint  path  string                     true  "Fingerprint của vulnerability"
+// @Param        body         body  model.TriageRuleRequest    true  "Triage rule data"
+// @Success      200  {object}  response.JSONResponse  "Cập nhật thành công"
+// @Failure      400  {object}  response.JSONResponse
+// @Failure      401  {object}  response.JSONResponse
+// @Failure      404  {object}  response.JSONResponse
+// @Failure      500  {object}  response.JSONResponse
+// @Router       /scans/{id}/triage/{fingerprint} [put]
 func (h *TriageHandler) UpsertTriageRule(c *gin.Context) {
 	scanID := c.Param("id")
 	fingerprint := c.Param("fingerprint")

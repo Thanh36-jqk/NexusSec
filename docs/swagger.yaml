@@ -1,0 +1,676 @@
+basePath: /api/v1
+definitions:
+  github_com_nexussec_nexussec_internal_domain_model.TriageRuleRequest:
+    properties:
+      is_false_positive:
+        type: boolean
+      is_muted:
+        type: boolean
+      notes:
+        type: string
+    type: object
+  github_com_nexussec_nexussec_pkg_response.JSONResponse:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  internal_gateway_handler.CleanVulnerability:
+    properties:
+      cvss_score:
+        type: number
+      cwe:
+        type: string
+      description:
+        type: string
+      port:
+        type: integer
+      protocol:
+        type: string
+      reference:
+        type: string
+      remediation:
+        type: string
+      service:
+        type: string
+      severity:
+        type: string
+      source_tool:
+        type: string
+      title:
+        type: string
+      url:
+        type: string
+      vuln_id:
+        type: string
+    type: object
+  internal_gateway_handler.ReportResponse:
+    properties:
+      scan_id:
+        type: string
+      summary:
+        $ref: '#/definitions/internal_gateway_handler.SummaryResponse'
+      vulnerabilities:
+        items:
+          $ref: '#/definitions/internal_gateway_handler.CleanVulnerability'
+        type: array
+    type: object
+  internal_gateway_handler.SummaryResponse:
+    properties:
+      critical:
+        type: integer
+      high:
+        type: integer
+      info:
+        type: integer
+      low:
+        type: integer
+      medium:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_gateway_handler.changePasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        maxLength: 72
+        minLength: 8
+        type: string
+    required:
+    - current_password
+    - new_password
+    type: object
+  internal_gateway_handler.createScanRequest:
+    properties:
+      scan_type:
+        enum:
+        - zap
+        - nmap
+        - full
+        type: string
+      target_id:
+        type: string
+    required:
+    - scan_type
+    - target_id
+    type: object
+  internal_gateway_handler.createTargetRequest:
+    properties:
+      base_url:
+        type: string
+      description:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - base_url
+    - name
+    type: object
+  internal_gateway_handler.loginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_gateway_handler.registerRequest:
+    properties:
+      email:
+        type: string
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+      username:
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
+  internal_gateway_handler.scanJobResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      progress:
+        type: integer
+      scan_type:
+        type: string
+      status:
+        type: string
+      target_url:
+        type: string
+    type: object
+  internal_gateway_handler.scanListItem:
+    properties:
+      created_at:
+        type: string
+      error_message:
+        type: string
+      id:
+        type: string
+      progress:
+        type: integer
+      scan_type:
+        type: string
+      status:
+        type: string
+      target_url:
+        type: string
+    type: object
+  internal_gateway_handler.targetResponse:
+    properties:
+      base_url:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_gateway_handler.userResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      role:
+        type: string
+      username:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Security scanning platform — manages targets, scan jobs, reports, and
+    triage rules.
+  title: NexusSec API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Xác thực user. Nếu thành công, gửi OTP qua email để xác thực 2
+        bước.
+      parameters:
+      - description: Thông tin đăng nhập
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_gateway_handler.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OTP đã gửi về email
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "400":
+          description: Dữ liệu không hợp lệ
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "401":
+          description: Sai email hoặc mật khẩu
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "403":
+          description: Tài khoản chưa xác thực email
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      summary: Login
+      tags:
+      - auth
+  /auth/me:
+    get:
+      description: Lấy thông tin profile của user đang đăng nhập (yêu cầu JWT).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_gateway_handler.userResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - auth
+  /auth/password:
+    put:
+      consumes:
+      - application/json
+      description: Đổi mật khẩu. Yêu cầu JWT và mật khẩu hiện tại đúng.
+      parameters:
+      - description: Mật khẩu cũ và mới
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_gateway_handler.changePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Đổi mật khẩu thành công
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "400":
+          description: Mật khẩu hiện tại sai
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: Change password
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Tạo tài khoản mới. Password được hash bằng bcrypt (cost=12). Trả
+        về 409 nếu email/username đã tồn tại.
+      parameters:
+      - description: Thông tin đăng ký
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_gateway_handler.registerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Đăng ký thành công
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_gateway_handler.userResponse'
+              type: object
+        "400":
+          description: Dữ liệu không hợp lệ
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "409":
+          description: Email hoặc username đã tồn tại
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      summary: Register a new user
+      tags:
+      - auth
+  /scans:
+    get:
+      description: Lấy danh sách tất cả scan job của user hiện tại (tối đa 50, sắp
+        xếp mới nhất).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_gateway_handler.scanListItem'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: List scan jobs
+      tags:
+      - scans
+    post:
+      consumes:
+      - application/json
+      description: Tạo scan job mới (status=pending) và đẩy vào RabbitMQ để xử lý
+        bất đồng bộ. Trả về 202 Accepted.
+      parameters:
+      - description: Target ID và loại scan
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_gateway_handler.createScanRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Scan job đã được chấp nhận
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_gateway_handler.scanJobResponse'
+              type: object
+        "400":
+          description: Dữ liệu không hợp lệ hoặc SSRF blocked
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "404":
+          description: Target không tồn tại
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "429":
+          description: Quá nhiều request
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a scan job
+      tags:
+      - scans
+  /scans/{id}:
+    get:
+      description: Lấy chi tiết một scan job theo ID. User phải là chủ sở hữu.
+      parameters:
+      - description: Scan Job ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_gateway_handler.scanListItem'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "404":
+          description: Scan không tồn tại
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: Get scan job detail
+      tags:
+      - scans
+  /scans/{id}/report:
+    get:
+      description: Lấy báo cáo lỗ hổng của một scan đã hoàn thành. Kiểm tra quyền
+        sở hữu qua PG rồi lấy dữ liệu từ MongoDB.
+      parameters:
+      - description: Scan Job ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_gateway_handler.ReportResponse'
+              type: object
+        "400":
+          description: Scan chưa hoàn thành
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "404":
+          description: Scan hoặc report không tồn tại
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: Get scan report
+      tags:
+      - reports
+  /scans/{id}/triage:
+    get:
+      description: Lấy danh sách triage rules của một scan (mà user sở hữu).
+      parameters:
+      - description: Scan Job ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Danh sách triage rules
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "404":
+          description: Scan không tồn tại
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: Get triage rules
+      tags:
+      - triage
+  /scans/{id}/triage/{fingerprint}:
+    put:
+      consumes:
+      - application/json
+      description: Tạo hoặc cập nhật triage rule cho một lỗ hổng (theo fingerprint).
+      parameters:
+      - description: Scan Job ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fingerprint của vulnerability
+        in: path
+        name: fingerprint
+        required: true
+        type: string
+      - description: Triage rule data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_nexussec_nexussec_internal_domain_model.TriageRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Cập nhật thành công
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: Upsert triage rule
+      tags:
+      - triage
+  /targets:
+    get:
+      description: Lấy danh sách tất cả target của user hiện tại.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_gateway_handler.targetResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: List scan targets
+      tags:
+      - targets
+    post:
+      consumes:
+      - application/json
+      description: Tạo một target mới để scan. URL được kiểm tra SSRF. Trả về 409
+        nếu URL đã tồn tại.
+      parameters:
+      - description: Thông tin target
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_gateway_handler.createTargetRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Tạo thành công
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_gateway_handler.targetResponse'
+              type: object
+        "400":
+          description: URL không hợp lệ hoặc SSRF blocked
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "409":
+          description: Target URL đã tồn tại
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_nexussec_nexussec_pkg_response.JSONResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a scan target
+      tags:
+      - targets
+securityDefinitions:
+  BearerAuth:
+    description: 'Nhập: Bearer {token}'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

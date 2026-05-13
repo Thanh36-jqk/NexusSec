@@ -109,14 +109,18 @@ func NewReportHandler(pg *sqlx.DB, mongoClient *mongo.Database, logger zerolog.L
 
 // GetReport retrieves the vulnerability report for a completed scan.
 //
-//	GET /api/v1/scans/:id/report
-//	Response: 200 OK with vulnerabilities list
-//
-// Flow:
-//  1. Verify scan ownership via PostgreSQL (user_id from JWT)
-//  2. Check scan status = COMPLETED and report_id exists
-//  3. Fetch report document from MongoDB by ObjectID
-//  4. Map to clean API response
+// @Summary      Get scan report
+// @Description  Lấy báo cáo lỗ hổng của một scan đã hoàn thành. Kiểm tra quyền sở hữu qua PG rồi lấy dữ liệu từ MongoDB.
+// @Tags         reports
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Scan Job ID (UUID)"
+// @Success      200  {object}  response.JSONResponse{data=ReportResponse}
+// @Failure      400  {object}  response.JSONResponse  "Scan chưa hoàn thành"
+// @Failure      401  {object}  response.JSONResponse
+// @Failure      404  {object}  response.JSONResponse  "Scan hoặc report không tồn tại"
+// @Failure      500  {object}  response.JSONResponse
+// @Router       /scans/{id}/report [get]
 func (h *ReportHandler) GetReport(c *gin.Context) {
 	scanID := c.Param("id")
 

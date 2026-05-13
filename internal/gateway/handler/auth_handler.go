@@ -101,12 +101,17 @@ func NewAuthHandler(
 
 // Register creates a new user account.
 //
-//	POST /api/v1/auth/register
-//	Request:  { "email": "...", "username": "...", "password": "..." }
-//	Response: 201 Created with user info
-//
-// Password is hashed with bcrypt (cost=12) before storage.
-// Returns 409 Conflict if email or username already exists.
+// @Summary      Register a new user
+// @Description  Tạo tài khoản mới. Password được hash bằng bcrypt (cost=12). Trả về 409 nếu email/username đã tồn tại.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      registerRequest  true  "Thông tin đăng ký"
+// @Success      201   {object}  response.JSONResponse{data=userResponse}  "Đăng ký thành công"
+// @Failure      400   {object}  response.JSONResponse  "Dữ liệu không hợp lệ"
+// @Failure      409   {object}  response.JSONResponse  "Email hoặc username đã tồn tại"
+// @Failure      500   {object}  response.JSONResponse
+// @Router       /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -181,14 +186,20 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 // ── Login ────────────────────────────────────────────────────
 
-// Login authenticates a user and returns a signed JWT.
+// Login authenticates a user.
 //
-//	POST /api/v1/auth/login
-//	Request:  { "email": "...", "password": "..." }
-//	Response: 200 OK with access_token (RS256 signed)
-//
-// Returns 401 Unauthorized if credentials are invalid.
-// Returns 403 Forbidden if the account is deactivated.
+// @Summary      Login
+// @Description  Xác thực user. Nếu thành công, gửi OTP qua email để xác thực 2 bước.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      loginRequest  true  "Thông tin đăng nhập"
+// @Success      200   {object}  response.JSONResponse  "OTP đã gửi về email"
+// @Failure      400   {object}  response.JSONResponse  "Dữ liệu không hợp lệ"
+// @Failure      401   {object}  response.JSONResponse  "Sai email hoặc mật khẩu"
+// @Failure      403   {object}  response.JSONResponse  "Tài khoản chưa xác thực email"
+// @Failure      500   {object}  response.JSONResponse
+// @Router       /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -307,10 +318,17 @@ func (h *AuthHandler) generateToken(user userRow) (string, error) {
 
 // ── Me ───────────────────────────────────────────────────────
 
-// Me returns the profile information of the currently authenticated user.
+// Me returns the profile of the authenticated user.
 //
-//	GET /api/v1/auth/me
-//	Response: 200 OK with user info
+// @Summary      Get current user profile
+// @Description  Lấy thông tin profile của user đang đăng nhập (yêu cầu JWT).
+// @Tags         auth
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.JSONResponse{data=userResponse}
+// @Failure      401  {object}  response.JSONResponse
+// @Failure      500  {object}  response.JSONResponse
+// @Router       /auth/me [get]
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID := c.GetString(middleware.ContextKeyUserID)
 	if userID == "" {
@@ -351,9 +369,18 @@ type changePasswordRequest struct {
 
 // ChangePassword updates the authenticated user's password.
 //
-//	PUT /api/v1/auth/password
-//	Body: { "current_password": "...", "new_password": "..." }
-//	Response: 200 OK
+// @Summary      Change password
+// @Description  Đổi mật khẩu. Yêu cầu JWT và mật khẩu hiện tại đúng.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      changePasswordRequest  true  "Mật khẩu cũ và mới"
+// @Success      200   {object}  response.JSONResponse  "Đổi mật khẩu thành công"
+// @Failure      400   {object}  response.JSONResponse  "Mật khẩu hiện tại sai"
+// @Failure      401   {object}  response.JSONResponse
+// @Failure      500   {object}  response.JSONResponse
+// @Router       /auth/password [put]
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	userID := c.GetString(middleware.ContextKeyUserID)
 	if userID == "" {

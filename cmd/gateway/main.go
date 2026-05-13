@@ -1,3 +1,14 @@
+// @title           NexusSec API
+// @version         1.0
+// @description     Security scanning platform — manages targets, scan jobs, reports, and triage rules.
+// @host            localhost:8080
+// @BasePath        /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in                         header
+// @name                       Authorization
+// @description                Nhập: Bearer {token}
+
 package main
 
 import (

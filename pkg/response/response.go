@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Response is the standardized JSON envelope for all API responses.
+// JSONResponse is the standardized JSON envelope for all API responses.
 //
 //	{
 //	  "status":  "success" | "error",
@@ -14,12 +14,15 @@ import (
 //	  "message": "descriptive message",
 //	  "data":    { ... } | null
 //	}
-type Response struct {
+type JSONResponse struct {
 	Status  string `json:"status"`
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    any    `json:"data"`
 }
+
+// Response is an alias for JSONResponse for backward compatibility.
+type Response = JSONResponse
 
 // Success sends a 200 OK response with data.
 func Success(c *gin.Context, message string, data any) {

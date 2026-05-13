@@ -50,10 +50,19 @@ func NewTargetHandler(db *sqlx.DB, logger zerolog.Logger) *TargetHandler {
 
 // CreateTarget registers a new scan target for the authenticated user.
 //
-//	Request:  { "name": "...", "base_url": "https://...", "description": "..." }
-//	Response: 201 Created with target info
-//
-// Validates URL format. Returns 409 if the user already has a target with the same base_url.
+// @Summary      Create a scan target
+// @Description  Tạo một target mới để scan. URL được kiểm tra SSRF. Trả về 409 nếu URL đã tồn tại.
+// @Tags         targets
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      createTargetRequest  true  "Thông tin target"
+// @Success      201   {object}  response.JSONResponse{data=targetResponse}  "Tạo thành công"
+// @Failure      400   {object}  response.JSONResponse  "URL không hợp lệ hoặc SSRF blocked"
+// @Failure      401   {object}  response.JSONResponse
+// @Failure      409   {object}  response.JSONResponse  "Target URL đã tồn tại"
+// @Failure      500   {object}  response.JSONResponse
+// @Router       /targets [post]
 func (h *TargetHandler) CreateTarget(c *gin.Context) {
 	var req createTargetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -121,6 +130,16 @@ func (h *TargetHandler) CreateTarget(c *gin.Context) {
 // ── GET /api/v1/targets — List Targets ───────────────────────
 
 // ListTargets returns all scan targets owned by the authenticated user.
+//
+// @Summary      List scan targets
+// @Description  Lấy danh sách tất cả target của user hiện tại.
+// @Tags         targets
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.JSONResponse{data=[]targetResponse}
+// @Failure      401  {object}  response.JSONResponse
+// @Failure      500  {object}  response.JSONResponse
+// @Router       /targets [get]
 func (h *TargetHandler) ListTargets(c *gin.Context) {
 	userID, exists := c.Get(middleware.ContextKeyUserID)
 	if !exists {

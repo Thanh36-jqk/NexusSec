@@ -11,7 +11,11 @@ import (
 	"github.com/nexussec/nexussec/internal/infrastructure/broker"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.mongodb.org/mongo-driver/mongo"
+
+	_ "github.com/nexussec/nexussec/docs" // Swagger auto-generated docs
 )
 
 // Dependencies holds all injected dependencies for the router.
@@ -73,6 +77,9 @@ func Setup(deps *Dependencies) *gin.Engine {
 		health.GET("/live", healthHandler.LivenessCheck)
 		health.GET("/ready", healthHandler.ReadinessCheck)
 	}
+
+	// ── Swagger UI (chỉ bật khi không phải production) ──────
+	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// ── API v1 ──────────────────────────────────────────────
 	jwtMw := middleware.NewJWTAuthMiddleware(

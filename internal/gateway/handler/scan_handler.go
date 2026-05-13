@@ -83,10 +83,20 @@ func NewScanHandler(db *sqlx.DB, rabbit *broker.Connection, logger zerolog.Logge
 
 // CreateScan creates a new scan job and enqueues it to RabbitMQ.
 //
-//	Flow: Validate → Insert into PG (status=pending) → Publish to RabbitMQ → 202 Accepted
-//
-// Returns 202 (not 200/201) because the scan is processed asynchronously.
-// The client should poll GET /scans/:id or listen to WebSocket for status updates.
+// @Summary      Create a scan job
+// @Description  Tạo scan job mới (status=pending) và đẩy vào RabbitMQ để xử lý bất đồng bộ. Trả về 202 Accepted.
+// @Tags         scans
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      createScanRequest  true  "Target ID và loại scan"
+// @Success      202   {object}  response.JSONResponse{data=scanJobResponse}  "Scan job đã được chấp nhận"
+// @Failure      400   {object}  response.JSONResponse  "Dữ liệu không hợp lệ hoặc SSRF blocked"
+// @Failure      401   {object}  response.JSONResponse
+// @Failure      404   {object}  response.JSONResponse  "Target không tồn tại"
+// @Failure      429   {object}  response.JSONResponse  "Quá nhiều request"
+// @Failure      500   {object}  response.JSONResponse
+// @Router       /scans [post]
 func (h *ScanHandler) CreateScan(c *gin.Context) {
 	var req createScanRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -204,6 +214,16 @@ func (h *ScanHandler) CreateScan(c *gin.Context) {
 // ── GET /api/v1/scans — List User Scans ─────────────────────
 
 // ListScans returns all scan jobs for the authenticated user.
+//
+// @Summary      List scan jobs
+// @Description  Lấy danh sách tất cả scan job của user hiện tại (tối đa 50, sắp xếp mới nhất).
+// @Tags         scans
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.JSONResponse{data=[]scanListItem}
+// @Failure      401  {object}  response.JSONResponse
+// @Failure      500  {object}  response.JSONResponse
+// @Router       /scans [get]
 func (h *ScanHandler) ListScans(c *gin.Context) {
 	userID, exists := c.Get(middleware.ContextKeyUserID)
 	if !exists {
@@ -244,6 +264,18 @@ func (h *ScanHandler) ListScans(c *gin.Context) {
 // ── GET /api/v1/scans/:id — Get Scan Detail ─────────────────
 
 // GetScan returns a single scan job by ID (user must own it).
+//
+// @Summary      Get scan job detail
+// @Description  Lấy chi tiết một scan job theo ID. User phải là chủ sở hữu.
+// @Tags         scans
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Scan Job ID (UUID)"
+// @Success      200  {object}  response.JSONResponse{data=scanListItem}
+// @Failure      401  {object}  response.JSONResponse
+// @Failure      404  {object}  response.JSONResponse  "Scan không tồn tại"
+// @Failure      500  {object}  response.JSONResponse
+// @Router       /scans/{id} [get]
 func (h *ScanHandler) GetScan(c *gin.Context) {
 	scanID := c.Param("id")
 	userID, exists := c.Get(middleware.ContextKeyUserID)
