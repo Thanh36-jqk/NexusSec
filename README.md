@@ -11,7 +11,6 @@
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![CI/CD](https://img.shields.io/github/actions/workflow/status/Thanh36-jqk/NexusSec/deploy.yml?branch=main&style=flat-square&logo=githubactions&label=CI%2FCD)](https://github.com/Thanh36-jqk/NexusSec/actions)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![Live](https://img.shields.io/badge/Live%20Demo-nexussec.me-blueviolet?style=flat-square&logo=globe&logoColor=white)](https://nexussec.me)
 
 </div>
 
@@ -19,7 +18,7 @@
 
 ## 📸 Demo
 
-**Live:** [nexussec.me](https://nexussec.me) — submit a target URL and watch OWASP ZAP + Nmap scans stream to the dashboard in real time over WebSocket.
+Spin up the full stack locally with `docker compose up -d` (see [Getting Started](#-getting-started)) — the dashboard is served at `http://localhost:3000`, submit a target URL and watch OWASP ZAP + Nmap scans stream in real time over WebSocket.
 
 📖 **API reference:** interactive **Swagger UI** at `/swagger/index.html` (generated from [`docs/swagger.yaml`](docs/swagger.yaml)).
 
@@ -243,7 +242,7 @@ Copy `.env.example` to `.env` and fill in the values. **Never commit `.env` to v
 | `JWT_PRIVATE_KEY_PATH` | `./deployments/jwt/private.pem` | RSA private key for signing |
 | `JWT_PUBLIC_KEY_PATH` | `./deployments/jwt/public.pem` | RSA public key for verification |
 | `JWT_EXPIRATION` | `24h` | JWT access token lifetime |
-| `FRONTEND_URL` | `https://nexussec.me` | Used for OAuth redirect URIs & CORS |
+| `FRONTEND_URL` | `http://localhost:3000` | Used for OAuth redirect URIs & CORS |
 | `SCANNER_CONCURRENCY` | `3` | Number of parallel scan goroutines |
 
 ### External Services
@@ -384,7 +383,6 @@ This project is released under the [MIT License](LICENSE).
 Security-focused Backend & DevOps Engineer
 
 [![GitHub](https://img.shields.io/badge/GitHub-Thanh36--jqk-181717?style=flat-square&logo=github)](https://github.com/Thanh36-jqk)
-[![Live Demo](https://img.shields.io/badge/Live-nexussec.me-blueviolet?style=flat-square)](https://nexussec.me)
 
 ---
 
