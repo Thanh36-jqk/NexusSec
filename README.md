@@ -9,7 +9,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)](https://nextjs.org)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![CI/CD](https://img.shields.io/github/actions/workflow/status/Thanh36-jqk/NexusSec/deploy.yml?branch=main&style=flat-square&logo=githubactions&label=CI%2FCD)](https://github.com/Thanh36-jqk/NexusSec/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/Thanh36-jqk/NexusSec/ci.yml?branch=main&style=flat-square&logo=githubactions&label=CI)](https://github.com/Thanh36-jqk/NexusSec/actions/workflows/ci.yml)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
 </div>
